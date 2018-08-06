@@ -189,7 +189,7 @@ end
 
 %% === ACTIVATION USING GMM Directly ===
 if exist('h_dec','var');  delete(h_dec); end
-act_type = 0;
+act_type = 1;
 switch act_type
     case 0
         % Option 1: with normalized pdf of gmm
@@ -285,7 +285,7 @@ ds_types = 1*ones(1,est_K);
                     % 3: Converging towards 'shifted' equilibrium 
 
 % Choose activation function for local DS's
-act_type   = 0;   % 0: No local dynamics`
+act_type   = 1;   % 0: No local dynamics`
                   % 1: With local dynamics               
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -458,7 +458,7 @@ end
 %% Plot WSAQF Lyapunov Function and derivative -- NEW
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Type of plot
-contour = 1; % 0: surf, 1: contour
+contour = 0; % 0: surf, 1: contour
 clear lyap_fun_comb lyap_der 
 
 % Lyapunov function
