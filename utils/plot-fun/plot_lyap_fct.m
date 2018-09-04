@@ -24,19 +24,25 @@ cmap =  [cmap1; cmap2(2:end, :)];
 colormap(vivid(cmap, [.5, .5]));
 colorbar
 
-switch min_max
-    case 0
-        [minimum_vdot, min_id_vdot]  = min(z_tmp(:));
-        if contour
-            minimum_vdot = 0;
-        end
-        hold on; scatter3(x(1,min_id_vdot),x(2,min_id_vdot),minimum_vdot,50,[1 1 1],'filled');
-    case 1
-        [maximum_vdot, max_id_vdot]  = max(z_tmp(:));
-        if contour
-            maximum_vdot = 0;
-        end
-        hold on; scatter3(x(1,max_id_vdot),x(2,max_id_vdot),maximum_vdot,50,[1 1 1],'filled');
+if ~isempty(min_max)
+    switch min_max
+        case 0
+            [minimum_vdot, min_id_vdot]  = min(z_tmp(:));
+            if contour
+                minimum_vdot = 0;
+            end
+            hold on; scatter3(x(1,min_id_vdot),x(2,min_id_vdot),minimum_vdot,50,[1 0 0],'filled');
+            x_min = [x(1,min_id_vdot),x(2,min_id_vdot)];
+            fprintf('Minimum value: %3.4f at [%3.4f,%3.4f]\n',minimum_vdot,x_min(1),x_min(2))
+        case 1
+            [maximum_vdot, max_id_vdot]  = max(z_tmp(:));
+            if contour
+                maximum_vdot = 0;
+            end
+            hold on; scatter3(x(1,max_id_vdot),x(2,max_id_vdot),maximum_vdot,50,[1 0 0],'filled');
+            x_max = [x(1,max_id_vdot),x(2,max_id_vdot)];
+            fprintf('Maximum value: %3.4f at [%3.4f,%3.4f]\n',maximum_vdot,x_max(1),x_max(2))
+    end
 end
 title(title_string, 'Interpreter','LaTex','FontSize', 18);
 

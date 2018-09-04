@@ -7,7 +7,6 @@ alpha  = feval(alpha_fun,x);
 h      = feval(h_fun,x);
 lambda = feval(lambda_fun,x);
 grad_h = feval(grad_h_fun,x);
-beta_eps = 0;
 
 % Check incidence angle at local attractor
 w = grad_h_fun(att_l);
@@ -62,28 +61,45 @@ for i = 1:M
     
     %%%%%%%%%%%%%%% COMPUTING TERMS FOR LYAPUNOV DERIVATIVE %%%%%%%%%%%%%%%        
     % Computing collected terms wrt. constraints   
-    % With squared local component
     lyap_der_global_term       = (x(:,i) - att_g)' *  (A_g'*Q)* (x(:,i) - att_g);
-    lyap_der_global_inter_term = (x(:,i) - att_g)'  * beta_l_2 * (A_g'*P_local) * (x(:,i) - att_l);                      
+    lyap_der_global_inter_term = (x(:,i) - att_g)' * beta_l_2 * (A_g'*P_local) * (x(:,i) - att_l);                           
     
-    % With squared local component
-    lyap_der_local_term        = (x(:,i) - att_l)' * (A_L' * Q) * (x(:,i) - att_l);                        
-    lyap_der_local_inter_term  = beta_l_2 * (x(:,i) - att_l)' * (A_L' * P_local) * (x(:,i) - att_g);   
+    lyap_der_local_term        = (x(:,i) - att_l)' * beta_l_2 * (A_L' * P_local) * (x(:,i) - att_l);                        
+    lyap_der_local_inter_term  = (x(:,i) - att_l)' * (A_L' * Q) * (x(:,i) - att_g);   
     
-    lyap_der_mod_global        = corr_scale*lambda(i)* grad_h(:,i)' * Q * (x(:,i) - att_g) ; 
-    lyap_der_mod_local         = beta_l_2*corr_scale*lambda(i)*grad_h(:,i)' * P_local * (x(:,i) - att_l);
-    lyap_der_mod = lyap_der_mod_global + lyap_der_mod_local;
-    
+    lyap_der_grad     = (P_global + P_global')*(x(:,i) - att_g) + ...
+                        beta_l_2*(P_local * (x(:,i) - att_l) + P_local' * (x(:,i) - att_g));
+    lyap_der_mod_term =  corr_scale*lambda(i)* grad_h(:,i)'*lyap_der_grad;       
 
-    % Sum of Global and Local Component
-    lyap_der(1,i) = alpha(i)*(lyap_der_global_term + lyap_der_global_inter_term) +  ...
-                    (1-alpha(i))*(lyap_der_local_term + lyap_der_local_inter_term - ...
-                     lyap_der_mod);  
+%     % Sum of Global and Local Component Option 1
+%     V_g_dot       = lyap_der_global_term + lyap_der_global_inter_term;
+%     V_l_dot       = lyap_der_local_term + lyap_der_local_inter_term - lyap_der_mod_term;
+%     lyap_der(1,i) = alpha(i)*V_g_dot + (1-alpha(i))*V_l_dot;
     
-     % Checking positivity of global interaction term
-%     [V, L] = eig(P_local);
-%     lyap_der(1,i) =  beta_l_2 * (x(:,i) - att_g)'*(x(:,i) - att_l) ;
-%                      beta_l_2 * (x(:,i) - att_g)'*V(:,2)*V(:,2)'*(x(:,i) - att_l);
+    
+    % Sum of Global and Local Component Option 2
+    
+    % Grouped Matrices
+    Q_g  = A_g'*P_global + P_global*A_g;
+    Q_gl = A_g'*P_local;
+    Q_lg = A_L'*(2*P_global);
+    Q_l  = A_L'*P_local;
+
+    % Computing Block Matrices
+    Q_G = alpha(i) * ( Q_g + beta_l_2*Q_gl );
+    Q_LG = (1-alpha(i))*( Q_lg + beta_l_2*Q_l );   
+    Q_GL = beta_l_2*alpha(i)*Q_gl;
+    Q_L  = (1-alpha(i))*beta_l_2*Q_l;
+
+    % Block Matrix
+    xi_aug  = [x(:,i) - att_g; x(:,i) - att_l];
+    Big_Q   = [Q_G Q_GL; Q_LG Q_L];
+    
+    % LMI format of Lyapunov Derivative
+    lyap_der(1,i) = xi_aug'*Big_Q*xi_aug - (1-alpha(i))*lyap_der_mod_term ;
+%     lyap_der(1,i) = xi_aug'*Big_Q*xi_aug ;
+%     lyap_der(1,i) = lyap_der_mod_term ;
+    
 end
 
 end

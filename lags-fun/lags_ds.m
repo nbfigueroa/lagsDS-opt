@@ -81,7 +81,7 @@ switch mix_type
 %                 x_dot(:,i) = alpha(i)*f_g  + (1-alpha(i))*f_l;
                 
                 % Sum of two components + correction           
-                x_dot(:,i) = alpha(i)*f_g  + (1-alpha(i))*(f_l - corr_scale*lambda(i)* grad_h(:,i));
+                x_dot(:,i) = (alpha(i))*f_g  + (1 - alpha(i))*(f_l - corr_scale*lambda(i)* grad_h(:,i));
             end                                 
         end               
         

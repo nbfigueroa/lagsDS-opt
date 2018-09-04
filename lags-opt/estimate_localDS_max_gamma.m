@@ -1,4 +1,4 @@
-function [A_l, b_l, A_s, b_s] = estimate_localDS_known_gamma(Data, A_g, att_g, att_l, ds_type, tracking_factor, w, P_g, P_l, Q)
+function [A_l, b_l, A_s, b_s] = estimate_localDS_max_gamma(Data, A_g, att_g, att_l, ds_type, w, P_g, P_l)
 
 % Positions and Velocity Trajectories
 Xi_ref = Data(1:2,:);
@@ -13,6 +13,7 @@ w_perp = [1;-w_norm(1)/(w_norm(2)+realmin)];
 sdp_options = [];
 sdp_options = sdpsettings('solver','penlab','verbose', 1);
 % sdp_options = sdpsettings('solver','fmincon','verbose', 1);
+% sdp_options = sdpsettings('solver','mosek','verbose', 1);
 
 % Define Constraints
 Constraints     = [];
@@ -20,7 +21,7 @@ Constraints     = [];
 epsilon = 0.1;
 
 % Compute Unit Directions of A_l
-% [Q, L_, ~] =  my_pca(Xi_ref)
+[Q, L_, ~] =  my_pca(Xi_ref)
 
 % Estimate Dynamics for local behavior
 if ds_type ~= 3
@@ -29,34 +30,32 @@ if ds_type ~= 3
     
     % Define Variables
     Lambda_l  = sdpvar(N, N, 'diagonal');
+    A_var_l   = sdpvar(N, N, 'full','real');
     Q_var_l   = sdpvar(N, N, 'symmetric','real');
-    Q_var_lg  = sdpvar(N, N, 'full','real');    
+    Q_var_lg  = sdpvar(N, N, 'symmetric','real');    
     b_var     = sdpvar(N,1);
-    
-    
-    % Auxiliary matrices for stability
-    Q_g   = A_g'*P_g + P_g*A_g;
-    Q_g_l = A_g'*P_l
+    sdpvar gamma_var;
     
     % Diverging/Converging constraints
     switch ds_type
         case 1   % 1: Symmetrically converging to ref. trajectory
             % First option, explicitly definig the directions of the A
-            Constraints = [Constraints Lambda_l <= -10*epsilon];            
-            Constraints = [Constraints Lambda_l(2,2) < tracking_factor*Lambda_l(1,1)];            
-            Constraints = [Constraints b_var   == -Q*Lambda_l*Q'*att_l];
+            Constraints = [Lambda_l(1,1) <= -epsilon Lambda_l(2,2) <= -1]; 
+            Constraints = [Constraints  10 >= gamma_var gamma_var <= 100]; 
+            Constraints = [Constraints Lambda_l(2,2) < gamma_var*Lambda_l(1,1)];            
+%             Constraints = [Constraints  A_var_l == Q*Lambda_l*Q'];
+            Constraints = [Constraints  b_var   == -Q*Lambda_l*Q'*att_l];
             
             % Symmetry constraints on the system matrix
-%             Constraints = [Constraints transpose(Q*Lambda_l*Q')*(P_g) + P_g*(Q*Lambda_l*Q') < -epsilon*eye(N)];
+%             Constraints = [Constraints transpose(A_var_l)*(P_g) + P_g*A_var_l == Q_var_lg];
 %             Constraints = [Constraints, Q_var_lg < -eye(N)];
-%             assign(Q_var_lg, -100*eye(N));
 
             % Negative eigenvalues for symmetric part
-%             Constraints = [Constraints 0.5*(transpose(A_var_l)*P_l + transpose(transpose(A_var_l)*P_l)) < -eye(N)];
+%             Constraints = [Constraints 0.5*(transpose(A_var_l)*P_l + transpose(transpose(A_var_l)*P_l)) < -eye(N)];           
             
             % Enforce symmertry on local component
-%             Constraints = [Constraints transpose(Q*Lambda_l*Q')*transpose(P_l) == Q_var_l];
-%             Constraints = [Constraints, Q_var_l <= -eye(N)];
+%             Constraints = [Constraints transpose(A_var_l)*P_l == Q_var_l];
+%             Constraints = [Constraints, Q_var_l < -eye(N)];
 
 
         case 2 % 2: Symmetrically diverging from ref. trajectory
@@ -64,20 +63,19 @@ if ds_type ~= 3
             Constraints = [Constraints  Lambda_l(2,2) > tracking_factor*abs(Lambda_l(1,1))];            
             
             % Symmetry constraints on the system matrix
-%             Constraints = [Constraints Q*Lambda_l*Q' ==  A_var_l];
-%             Constraints = [Constraints  b_var == -A_var_l*att_l];
-%             
-%             Constraints = [Constraints transpose(Q*Lambda_l*Q')*P_g' + transpose(Q*Lambda_l*Q')*P_g == Q_var_lg];
-%             Constraints = [Constraints transpose(Q*Lambda_l*Q')*P_l == Q_var_l];
-%             
-%             Constraints = [Constraints, Q_var_lg >= epsilon*eye(N)];
-%             Constraints = [Constraints, Q_var_l >= epsilon*eye(N)];
-%             
-%             assign(Q_var_l,10*eye(N));
-%             assign(Q_var_lg,10*eye(N));
+            Constraints = [Constraints Q*Lambda_l*Q' ==  A_var_l];
+            Constraints = [Constraints  b_var == -A_var_l*att_l];
+            
+            Constraints = [Constraints transpose(Q*Lambda_l*Q')*P_g' + transpose(Q*Lambda_l*Q')*P_g == Q_var_lg];
+            Constraints = [Constraints transpose(Q*Lambda_l*Q')*P_l == Q_var_l];
+            
+            Constraints = [Constraints, Q_var_lg >= epsilon*eye(N)];
+            Constraints = [Constraints, Q_var_l >= epsilon*eye(N)];
+            
+            assign(Q_var_l,10*eye(N));
+            assign(Q_var_lg,10*eye(N));
             
     end
-
     
     % Calculate the approximated velocities with A_c
     Xi_d_dot_t = sdpvar(N,M, 'full');
@@ -92,20 +90,22 @@ if ds_type ~= 3
     % Then calculate the difference between approximated velocities
     % and the demonstated ones with A_t
     Xi_dot_error_t = Xi_d_dot_t - Xi_ref_dot;
-    Aux_var     = sdpvar(N,length(Xi_dot_error_t));
-    Objective   = sum((sum(Aux_var.^2)));
+    Aux_var     = sdpvar(N,length(Xi_dot_error_t));    
     Constraints = [Constraints, Aux_var == Xi_dot_error_t];
+%     Objective = 0.001*sum((sum(Aux_var.^2)));
+    Objective   = sum((sum(Aux_var.^2)));
     
     % Solve optimization problem
-    sol = optimize(Constraints, Objective, sdp_options);
+    sol = optimize(Constraints,Objective,sdpsettings);
     if sol.problem ~= 0
         yalmiperror(sol.problem);
     end
     
     % Output Variables
+    value(gamma_var)
     Lambda_l = value(Lambda_l)
     A_l = Q*Lambda_l*Q'
-%     A_l = value(A_var_l);
+%     A_l = value(A_var_l)
     check(Constraints)
     fprintf('Total error: %2.2f\n', value(Objective));
 else

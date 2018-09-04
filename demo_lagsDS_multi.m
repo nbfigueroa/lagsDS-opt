@@ -377,9 +377,9 @@ A_l = []; b_l = []; A_d = []; b_d = [];
 for k=1:est_K
     % Compute lamda's from reference trajectories
     if Ag_type == 1
-        [A_l(:,:,k), ~, ~, A_d(:,:,k), b_d(:,k)] = estimate_localDS_known_gamma(Data_k{k}, A_g(:,:,k),  att_g, att_l(:,k), ds_types(k), tracking_factor(k),w(:,k));
+        [A_l(:,:,k), ~, A_d(:,:,k), b_d(:,k)] = estimate_localDS_known_gamma(Data_k{k}, A_g(:,:,k),  att_g, att_l(:,k), ds_types(k), tracking_factor(k),w(:,k));
     else
-        [A_l(:,:,k), ~, ~, A_d(:,:,k), b_d(:,k)] = estimate_localDS_known_gamma(Data_k{k}, A_g, att_g, att_l(:,k), ds_types(k), tracking_factor(k),w(:,k));
+        [A_l(:,:,k), ~, A_d(:,:,k), b_d(:,k)] = estimate_localDS_known_gamma(Data_k{k}, A_g, att_g, att_l(:,k), ds_types(k), tracking_factor(k),w(:,k));
     end 
     
     if any(att_l(:,k)==att_g)
