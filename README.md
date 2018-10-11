@@ -1,5 +1,5 @@
 ## Locally Active Globally Stable (LAGS) - DS
-Learning and Simulation of LAGS-DS (Locally Active Globally Stable) [1] for 2D and 3D tasks.
+Toolbox including optimization techniques for estimation of LAGS-DS (Locally Active Globally Stable) [1] for 2D and 3D tasks. It also includes a simulation of a 2D robot in which you can test your learned LAGS models.
 
 
 ### Installation Instructions
@@ -13,10 +13,13 @@ In case you want to update the submodules to their latest version, you can do so
 ```
 git submodule update --remote
 ```
+
 ### Running the demo scripts
 
+---
+
 **References**     
-[1] Figueroa, N and Billard, A. "Locally Active Globally Stable Dynamical Systems: Theory, Learning and Experiments" [In Preparation]
+> [1] Figueroa, N and Billard, A. "Locally Active Globally Stable Dynamical Systems: Theory, Learning and Experiments" [In Preparation]
 
 **Contact**: [Nadia Figueroa](http://lasa.epfl.ch/people/member.php?SCIPER=238387) (nadia.figueroafernandez AT epfl dot ch)
 
