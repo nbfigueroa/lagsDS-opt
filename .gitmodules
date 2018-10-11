@@ -1,0 +1,8 @@
+[submodule "ds-opt"]
+	path = ds-opt
+	url = git@github.com:nbfigueroa/ds-opt.git
+	branch = master
+[submodule "phys-gmm"]
+	path = phys-gmm
+  url = https://github.com/nbfigueroa/phys-gmm.git
+  branch = master
