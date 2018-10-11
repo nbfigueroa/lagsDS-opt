@@ -4,5 +4,5 @@
 	branch = master
 [submodule "phys-gmm"]
 	path = phys-gmm
-  url = https://github.com/nbfigueroa/phys-gmm.git
+	url = git@github.com:nbfigueroa/phys-gmm.git
   branch = master
