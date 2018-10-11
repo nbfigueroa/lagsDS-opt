@@ -6,6 +6,7 @@ Toolbox including optimization techniques for estimation of LAGS-DS (Locally Act
 This package depends on two external packages:
 - [phys-gmm](https://github.com/nbfigueroa/phys-gmm): Toolbox with GMM fitting approaches [2].
 - [ds-opt](https://github.com/nbfigueroa/ds-opt): Toolbox for lpv-DS optimization [2]
+
 These are included as submodules and can be downloaded as follows:
 
 After cloning the repo one must initialize/download the submodules with the following commands:
