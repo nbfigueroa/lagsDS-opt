@@ -60,24 +60,17 @@ for i = 1:M
     Q = P_global + P_global' + beta_l_2*P_local';
     
     %%%%%%%%%%%%%%% COMPUTING TERMS FOR LYAPUNOV DERIVATIVE %%%%%%%%%%%%%%%        
-    % Computing collected terms wrt. constraints   
+    % Computing collected terms wrt. constraints   (Unnecesary... old implementation)
     lyap_der_global_term       = (x(:,i) - att_g)' *  (A_g'*Q)* (x(:,i) - att_g);
-    lyap_der_global_inter_term = (x(:,i) - att_g)' * beta_l_2 * (A_g'*P_local) * (x(:,i) - att_l);                           
-    
+    lyap_der_global_inter_term = (x(:,i) - att_g)' * beta_l_2 * (A_g'*P_local) * (x(:,i) - att_l);                               
     lyap_der_local_term        = (x(:,i) - att_l)' * beta_l_2 * (A_L' * P_local) * (x(:,i) - att_l);                        
     lyap_der_local_inter_term  = (x(:,i) - att_l)' * (A_L' * Q) * (x(:,i) - att_g);   
     
+    % Computing modulation term
     lyap_der_grad     = (P_global + P_global')*(x(:,i) - att_g) + ...
                         beta_l_2*(P_local * (x(:,i) - att_l) + P_local' * (x(:,i) - att_g));
     lyap_der_mod_term =  corr_scale*lambda(i)* grad_h(:,i)'*lyap_der_grad;       
 
-%     % Sum of Global and Local Component Option 1
-%     V_g_dot       = lyap_der_global_term + lyap_der_global_inter_term;
-%     V_l_dot       = lyap_der_local_term + lyap_der_local_inter_term - lyap_der_mod_term;
-%     lyap_der(1,i) = alpha(i)*V_g_dot + (1-alpha(i))*V_l_dot;
-    
-    
-    % Sum of Global and Local Component Option 2
     
     % Grouped Matrices
     Q_g  = A_g'*P_global + P_global*A_g;
@@ -97,8 +90,6 @@ for i = 1:M
     
     % LMI format of Lyapunov Derivative
     lyap_der(1,i) = xi_aug'*Big_Q*xi_aug - (1-alpha(i))*lyap_der_mod_term ;
-%     lyap_der(1,i) = xi_aug'*Big_Q*xi_aug ;
-%     lyap_der(1,i) = lyap_der_mod_term ;
     
 end
 

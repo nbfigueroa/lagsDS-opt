@@ -1,4 +1,4 @@
-function [h] = plot_lyap_fct(lyap_fun, contour, limits, title_string, min_max)
+function [h] = plot_lyap_fct_lags(lyap_fun, contour, limits, title_string, min_max)
 
 % Plot the Lyapunov Function Contours
 nx = 200; ny = 200;

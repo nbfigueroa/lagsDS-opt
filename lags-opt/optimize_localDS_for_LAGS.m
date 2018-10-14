@@ -5,22 +5,57 @@ Xi_ref = Data(1:2,:);
 Xi_ref_dot = Data(3:4,:);
 [N,M] = size(Xi_ref_dot);
 
-% Attractor and Directions (Pre-computed geometrically)
-% Compute Unit Directions of A_l
-[Q, L, ~] =  my_pca(Xi_ref);
-att_l = Xi_ref(:,end);
 
-% Tests for maximizing the artificial local dynamics
-% w_norm = -w/norm(w);
-% w_perp = [1;-w_norm(1)/(w_norm(2)+realmin)];
-% Xi_ref_eps = Xi_ref(:,1:2:end) + w_perp*0.25;
-% M_art = size(Xi_ref_eps,2);
+%%%%%%%%%%%%%% Parse Optimization Options %%%%%%%%%%%%%%
+solver_type     = stability_vars.solver;
 
-% Optimization variables
-epsilon = 0.001;
-
-% Solve the optimization problem with Yalmip
+%%%%%%%%%%%%%% Initialize optimization problem with Yalmip %%%%%%%%%%%%%%
 sdp_options = [];
+
+% Define Solver to use
+switch solver_type
+    case 'baron'   % 'baron': Nonlinear programming solver
+        sdp_options = sdpsettings('solver','baron','verbose', 1,'debug',1, 'usex0',1);
+        
+    case 'fmincon' % 'fmincon': Nonlinear programming solver
+        sdp_options = sdpsettings('solver','fmincon','verbose', 1,'debug',1, 'usex0',1, 'allownonconvex',1, 'fmincon.algorithm','interior-point', 'fmincon.TolCon', 1e-12, 'fmincon.MaxIter', 500);
+        
+end
+warning('off','YALMIP:strict')
+
+
+%%%%%%%%%%%%%% Parse Variables for Stability Constraints %%%%%%%%%%%%%%
+if stability_vars.add_constr
+    constraint_type = stability_vars.constraint_type;
+    chi_samples     = stability_vars.chi_samples;
+    [~,M_chi]       = size(chi_samples);
+    alpha           = feval(stability_vars.alpha_fun,chi_samples);
+    h               = feval(stability_vars.h_fun,chi_samples);
+    
+    switch constraint_type
+        case 'full'
+            grad_lyap   = feval(stability_vars.grad_lyap_fun, chi_samples);
+        case 'matrix'
+            P_g = stability_vars.P_g;
+            P_l = stability_vars.P_l;
+        case 'hessian'
+            P_g = stability_vars.P_g;
+            P_l = stability_vars.P_l;
+            epsilon = 1e-10;
+            for m=1:M_chi
+                H_fQ_vars{m}     = sdpvar(N,N,'symmetric');
+                eig1_HfQ_vars{m} = sdpvar(1,1);
+                eig2_HfQ_vars{m} = sdpvar(1,1);
+            end
+            
+    end
+end
+
+%%%%%%%%%%%%%% Pre-compute/Extract Variables for Optimization %%%%%%%%%%%%%%
+
+% Attractor and Directions (Pre-computed geometrically)
+[Q, ~, ~] =  my_pca(Xi_ref);
+att_l = Xi_ref(:,end);
 
 % Check incidence angle at local attractor
 w = stability_vars.grad_h_fun(att_l);
@@ -44,30 +79,14 @@ else
     h_set = 1;
     corr_scale = 1;
 end
-%%%%%%%%%%%%%% Estimate Values for Stability Constraints %%%%%%%%%%%%%%
-chi_samples = stability_vars.chi_samples;
-[~,M_chi]   = size(chi_samples);
-grad_lyap   = feval(stability_vars.grad_lyap_fun, chi_samples);
-alpha       = feval(stability_vars.alpha_fun,chi_samples);
-h           = feval(stability_vars.h_fun,chi_samples);
-lambda      = feval(stability_vars.lambda_fun,chi_samples);
-grad_h      = feval(stability_vars.grad_h_fun,chi_samples);
-P_l         = stability_vars.P_l;
-
-% For Non-linear problems
-% sdp_options = sdpsettings('solver','fmincon','verbose', 1,'debug',1, 'usex0',1, 'allownonconvex',1, 'fmincon.algorithm','interior-point', 'fmincon.TolCon', 1e-12, 'fmincon.MaxIter', 500);    
-warning('off','YALMIP:strict') 
-sdp_options = sdpsettings('solver','baron','verbose', 1,'debug',1, 'usex0',1);    
-
-% Define Constraints
-Constraints     = [];
 
 % predefine A_d
 A_d = eye(N); b_d = -A_d*att_l;
-
 Lambda_Ag = eig(A_g);
 lambda_max_Ag = max(Lambda_Ag);
-lambda_min_Ag = min(Lambda_Ag);
+
+% Define Constraints
+Constraints     = [];
 
 %%%%%%%%%%%%%% Estimate Dynamics for locally active behavior %%%%%%%%%%%%%%
 if ds_type ~= 3
@@ -76,7 +95,6 @@ if ds_type ~= 3
     sdpvar track_var
     Lambda_l  = sdpvar(N,N,'diagonal');
     b_l_var   = sdpvar(N,1);
-    Q_var_lg  = sdpvar(N, N, 'full');  
     
     % Variables for locally deflective dynamics
     A_d_var     = sdpvar(N,N,'diagonal');
@@ -89,8 +107,6 @@ if ds_type ~= 3
             Constraints = [Constraints  1 <= track_var track_var <= 500]; % bounds for tracking factor
             Constraints = [Constraints  Lambda_l(2,2) < track_var*Lambda_l(1,1)];       
             Constraints = [Constraints  b_l_var == -(Q*Lambda_l*Q')*att_l];           
-%             Constraints = [Constraints 2*transpose(Q*Lambda_l*Q')*P_l  == Q_var_lg];
-%             Constraints = [Constraints  Q_var_lg(1,2)==Q_var_lg(2,1) ];
             
             % Assign initial values
             init_eig = -0.5; init_track = 5;
@@ -129,18 +145,98 @@ if ds_type ~= 3
             % Compute local dynamics variables
             if h(j) >= 1; h_mod = 1;else; h_mod = h(j)*h_set;end
             A_L = h_mod*(Q*Lambda_l*Q') + (1-h_mod)*A_d_var;
-            
-            % Compute lyapunov constraint on Chi samples
-            chi_lyap_constr = alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) + ...
-                (1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l) - corr_scale*lambda(j)* grad_h(:,j));
-            
+            switch constraint_type
+                case 'full' % Lyapunov Constraint using gradient of lyapnuv function
+                    
+                    % Compute lyapunov constraint on Chi samples
+                    Constraints = [Constraints alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) < ...
+                        -(1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l))];
+                    
+                    %%%%%%%%%%%% FOR DEBUGGING %%%%%%%%%%%%                    
+                    chi_lyap_constr = alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) + ...
+                        (1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l));
+                    
+                case 'matrix'  % Lyapunov Constraint using Q matrices                   
+                    % Compute Grouped Matrices
+                    Q_g  = A_g'*P_g + P_g*A_g;
+                    Q_gl = A_g'*P_l;
+                    Q_lg = A_L'*(2*P_g);
+                    Q_l  = A_L'*P_l;                    
+                    
+                    % Compute Local Lyapunov Component
+                    lyap_local =   (chi_samples(:,j) - att_g)'*P_l*(chi_samples(:,j) - att_l);
+                    
+                    % Computing activation term
+                    if lyap_local >= 0
+                        beta = 1;
+                    else
+                        beta = 0;
+                    end
+                    beta_l_2 = beta*2*lyap_local;
+                    
+                    % Computing Block Matrices
+                    Q_G = alpha(j) * ( Q_g + beta_l_2*Q_gl );
+                    Q_LG = (1-alpha(j))*( Q_lg + beta_l_2*Q_l );
+                    Q_GL = alpha(j)*beta_l_2*Q_gl;
+                    Q_L  = (1-alpha(j))*beta_l_2*Q_l;
+                    Q_LGL = Q_LG + Q_GL;
+                                        
+                    % Compute lyapunov constraint on Chi samples
+                    Constraints = [Constraints (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) < ...
+                        -( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
+                           (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l))];
+                       
+                    %%%%%%%%%%%% FOR DEBUGGING %%%%%%%%%%%%
+                    chi_lyap_constr = (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
+                        (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
+                        (chi_samples(:,j) - att_l)'* Q_L *(chi_samples(:,j) - att_l);
+                    
+                    
+                case 'hessian'  % Lyapunov Constraint using Hessian of Q function                    
+                    % Compute Grouped Matrices
+                    Q_g  = A_g'*P_g + P_g*A_g;
+                    Q_gl = A_g'*P_l;
+                    Q_lg = A_L'*(2*P_g);
+                    Q_l  = A_L'*P_l;
+                    
+                    % Compute Local Lyapunov Component
+                    lyap_local =   (chi_samples(:,j) - att_g)'*P_l*(chi_samples(:,j) - att_l);
+                    
+                    % Computing activation term
+                    if lyap_local >= 0
+                        beta = 1;
+                    else
+                        beta = 0;
+                    end
+                    beta_l_2 = beta*2*lyap_local;
+                    
+                    % Computing Block Matrices
+                    Q_G = alpha(j) * ( Q_g + beta_l_2*Q_gl );
+                    Q_LG = (1-alpha(j))*( Q_lg + beta_l_2*Q_l );
+                    Q_GL = alpha(j)*beta_l_2*Q_gl;
+                    Q_L  = (1-alpha(j))*beta_l_2*Q_l;
+                    Q_LGL = Q_LG + Q_GL;
+                    
+                    % Constraint function
+                    H_fQ_vars{j}  = 2*Q_G + 2*(Q_LGL+Q_LGL') + 2*(Q_L+Q_L');
+                    
+%                     eig1_HfQ_vars{j} =   0.5*( (H_fQ_vars{j}(1,1) + H_fQ_vars{j}(2,2)) - sqrtm( (H_fQ_vars{j}(1,1) - H_fQ_vars{j}(2,2))^2 + 4*H_fQ_vars{j}(1,2)));
+%                     eig2_HfQ_vars{j} =   0.5*( (H_fQ_vars{j}(1,1) + H_fQ_vars{j}(2,2)) + sqrtm( (H_fQ_vars{j}(1,1) - H_fQ_vars{j}(2,2))^2 + 4*H_fQ_vars{j}(1,2)));                    
+                    eig_fun = @(x)sdpfun(x,'@(x)eig(x)');
+                    eigs_HfQ = eig_fun(H_fQ_vars{j});
+                    eig1_HfQ_vars{j} =   eigs_HfQ(1);
+                    eig2_HfQ_vars{j} =   eigs_HfQ(2);                    
+                    % Applying Constraints on Eigenvalues of Hessian                                                        
+                    Constraints = [Constraints eig1_HfQ_vars{j} <= -epsilon];
+                    Constraints = [Constraints eig2_HfQ_vars{j} <= -epsilon];
+%                     assign(eig1_HfQ_vars{j}, -20000);
+%                     assign(eig2_HfQ_vars{j}, -20000);
+                    
+            end            
+
             % Violations
-            total_lyap_constr_viol = total_lyap_constr_viol + (0.5 + 0.5*sign(chi_lyap_constr));
-            % Full Constraint
-%             Constraints = [Constraints alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) < -(1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l) - corr_scale*lambda(j)* grad_h(:,j))];
-            
-            % Strict Constraint
-            Constraints = [Constraints alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) < -(1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l))];
+%             total_lyap_constr_viol = total_lyap_constr_viol + (0.5 + 0.5*sign(chi_lyap_constr));
+                        
         end
         fprintf('done \n');
     end
@@ -183,9 +279,9 @@ if ds_type ~= 3
     A_d = value(A_d_var);
     b_d = value(b_d_var);
 
-    if stability_vars.add_constr
-        total_lyap_viol = value(total_lyap_constr_viol)        
-    end
+%     if stability_vars.add_constr
+%         total_lyap_viol = value(total_lyap_constr_viol)        
+%     end
     
     
 else
