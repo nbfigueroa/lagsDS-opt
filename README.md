@@ -32,4 +32,7 @@ Note that [phys-gmm](https://github.com/nbfigueroa/phys-gmm) depends on [LightSp
 
 **Contact**: [Nadia Figueroa](http://lasa.epfl.ch/people/member.php?SCIPER=238387) (nadia.figueroafernandez AT epfl dot ch)
 
+**Acknowledgments**
+This work was supported by the EU project [Cogimon](https://cogimon.eu/cognitive-interaction-motion-cogimon) H2020-ICT-23-2014.
+
 
