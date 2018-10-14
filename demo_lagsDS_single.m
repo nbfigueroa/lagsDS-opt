@@ -40,27 +40,45 @@ end
 Xi_ref     = Data(1:2,:);
 Xi_dot_ref = Data(3:end,:);
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% %%%%%% Step 1a: Discover Local Models with Selected GMM Estimation type %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%% GMM Estimation Alorithm %%%%
-% 0: Physically-Consistent Non-Parametric
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%  Step 2 (GMM FITTING): Fit GMM to Trajectory Data %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% GMM Estimation Algorithm %%%%%%%%%%%%%%%%%%%%%%
+% 0: Physically-Consistent Non-Parametric (Collapsed Gibbs Sampler)
 % 1: GMM-EM Model Selection via BIC
-% 2: GMM via Competitive-EM
+% 2: CRP-GMM (Collapsed Gibbs Sampler)
 est_options = [];
-est_options.type       = 1;   % GMM Estimation Alorithm Type    
-est_options.maxK       = 10;  % Maximum Gaussians for Type 1/2
-est_options.do_plots   = 0;   % Plot Estimation Statistics
-est_options.adjusts_C   = 1;   % Adjust Sigmas
-est_options.fixed_K     = 1;  % Fix K and estimate with EM
-est_options.exp_scaling = 0;   % Scaling for the similarity to improve locality
+est_options.type             = 0;   % GMM Estimation Alorithm Type   
 
-% Discover Local Models
-[Priors, Mu, Sigma] = discover_local_models(Xi_ref, Xi_dot_ref, est_options);
+% If algo 1 selected:
+est_options.maxK             = 15;  % Maximum Gaussians for Type 1
+est_options.fixed_K          = [];  % Fix K and estimate with EM for Type 1
 
-% Extract Cluster Labels
-est_K      = length(Priors); 
-est_labels =  my_gmm_cluster(Xi_ref, Priors, Mu, Sigma, 'hard', []);
+% If algo 0 or 2 selected:
+est_options.samplerIter      = 40;  % Maximum Sampler Iterations
+                                    % For type 0: 20-50 iter is sufficient
+                                    % For type 2: >100 iter are needed
+                                    
+est_options.do_plots         = 1;   % Plot Estimation Statistics
+est_options.sub_sample       = 2;   % Size of sub-sampling of trajectories
+                                    % 1/2 for 2D datasets, >2/3 for real    
+% Metric Hyper-parameters
+est_options.estimate_l       = 1;   % '0/1' Estimate the lengthscale, if set to 1
+est_options.l_sensitivity    = 2;   % lengthscale sensitivity [1-10->>100]
+                                    % Default value is set to '2' as in the
+                                    % paper, for very messy, close to
+                                    % self-intersecting trajectories, we
+                                    % recommend a higher value
+est_options.length_scale     = [];  % if estimate_l=0 you can define your own
+                                    % l, when setting l=0 only
+                                    % directionality is taken into account
+
+% Fit GMM to Trajectory Data
+[Priors, Mu, Sigma] = fit_gmm(Xi_ref, Xi_dot_ref, est_options);
+
+%% Generate GMM data structure for DS learning
+clear ds_gmm; ds_gmm.Mu = Mu; ds_gmm.Sigma = Sigma; ds_gmm.Priors = Priors; 
+
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% %%%%%% Step 1b: Estimate local attractors and Construct Activation function %%%%%%
@@ -124,8 +142,8 @@ xlabel('$\mathbf{\xi}_1$','Interpreter', 'LaTex','FontSize',15)
 ylabel('$\mathbf{\xi}_2$','Interpreter', 'LaTex','FontSize',15)
 title('Reference Trajectory, Global Attractor and Local Attractor','Interpreter', 'LaTex','FontSize',15)
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%  ESTIMATE CANDIDATE LYAPUNOV FUNCTION PARAMETERS  %%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%% Step 2: ESTIMATE CANDIDATE LYAPUNOV FUNCTION PARAMETERS %%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 [Vxf]    = learn_wsaqf(Data, att_l);
 P_g      = Vxf.P(:,:,1);
@@ -134,9 +152,10 @@ P_l      = Vxf.P(:,:,2);
 % Lyapunov derivative and gradient functions
 grad_lyap_fun = @(x)gradient_lyapunov(x, att_g, att_l, P_g, P_l);
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%      ESTIMATE Global and Local System Matrices     %%%%%%%%%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%% Step 3: ESTIMATE Global and Local System Matrices     %%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %%%%%%%%%%%%%%%%%%% DS PARAMETER INITIALIZATION %%%%%%%%%%%%%%%%%%%
 % Global Dynamics type
 fg_type = 0;          % 0: Fixed Linear system Axi + b
@@ -286,7 +305,6 @@ h_samples_necc = scatter(necc_violating_points(1,:),necc_violating_points(2,:),'
 
 %% Post-learning Stability Check using Matrix inequalities/constraints
 clc;
-
 % Computing Max activation terms
 if sum(necc_violations) > 0
     x_test = Xi_ref(:,randi(size(Xi_ref,2)));
