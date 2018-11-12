@@ -207,7 +207,7 @@ end
 
 % Estimate Global Dynamics from Data
 if fg_type == 0
-    A_g = -10*eye(2); b_g = -A_g*att_g;
+    A_g = -2*eye(2); b_g = -A_g*att_g;
 else
     [A_g, b_g, ~] = optimize_linear_ds_from_data(Data, att_g, fg_type, 1, P_g, Mu, P_l, att_l, 'full');       
 end
@@ -250,7 +250,7 @@ if stability_vars.add_constr
     
     
     % Type of constraint to evaluate
-    stability_vars.constraint_type = 'matrix';    % options: 'full/matrix'
+    stability_vars.constraint_type = 'hessian';    % options: 'full/matrix/hessian'
     
     % Variable for each type
     if strcmp(stability_vars.constraint_type,'full')
@@ -259,16 +259,18 @@ if stability_vars.add_constr
         stability_vars.P_l           = P_l;
         stability_vars.P_g           = P_g;
     end
-        
-        
+                
     % Local DS Optimization with Constraint Rejection Sampling
     num_violations = 1; iter = 1;
     while num_violations > 0
         fprintf('Iteration %d, using %d chi-samples..\n', iter, size(chi_samples,2));
         stability_vars.chi_samples   = chi_samples;
-        tic;        
-        [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, w, stability_vars);
-        toc;
+ 
+        if strcmp(stability_vars.constraint_type,'hessian')
+            [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars);
+        else
+            [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
+        end
         
         %%%% Check for violations in compact set %%%%        
         fprintf(2, 'Checking violation of Lyapunov Constraint.. ');
@@ -305,7 +307,7 @@ if stability_vars.add_constr
     end
 else
     tic;
-    [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, w, stability_vars);
+    [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
     toc;
 end
 
@@ -341,11 +343,9 @@ h_samples_necc = scatter(necc_violating_points(1,:),necc_violating_points(2,:),'
 clc;
 % Computing Max activation terms
 if sum(necc_violations) > 0
-    x_test = Xi_ref(:,randi(size(Xi_ref,2)));
     x_test = draw_chi_samples (Sigma,Mu,1,activ_fun);
     x_test = necc_violating_points (:,randi(sum(necc_violations)));
 else           
-%     x_test = Xi_ref(:,randi(size(Xi_ref,2)));
     x_test = draw_chi_samples (Sigma,Mu,1,activ_fun);
 end
 
@@ -353,7 +353,7 @@ end
 [stable_necc, stab_local_contr, Big_Q_sym] = check_lags_LMI_constraints(x_test, alpha_fun, h_fun, ... 
                                          A_g, A_l, A_d, att_g, att_l, P_l, P_g, lyap_der, Mu, Sigma);
 
-%% Analyze Local Stability of EigenFunctions
+% Analyze Local Stability of EigenFunctions
 Q_sym_fun       = @(x)quadratic_4d_to_2D(x, att_g, att_l, Big_Q_sym);
 plot_lyap_fct_lags(Q_sym_fun, 0, limits_,  '$Q_{sym}$ Component', []); hold on;
 plot_ds_model(fig1, ds_lags_single, att_g, limits,'low'); 
@@ -367,13 +367,6 @@ eig(H_Q)
 trace(H_Q)
 if exist('h_sample_min','var'); delete(h_sample_min);  end
 [h_sample_min] = scatter(x_min(1),x_min(2),100,'+','r','LineWidth',2);
-
-%%
-Q_sym_fun_opt   = @(x)quadratic_4d_schur_optimal(x, att_l,  S_Q);
-plot_lyap_fct(Q_sym_fun_opt, 0, limits_,  '$Q_{sym-opt}$ Component', 0); hold on;
-plot_ds_model(fig1, ds_lags_single, att_g, limits,'low'); 
-scatter3(x_test(1),x_test(2),Q_sym_fun_opt(x_test),'g','filled');
-Q_test_opt = Q_sym_fun_opt(x_test) 
 
 %% %%%%%%%%%%%%    Generate/Plot Resulting DS  %%%%%%%%%%%%%%%%%%%
 % Function for DS

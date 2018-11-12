@@ -1,4 +1,4 @@
-function [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, ds_type, w, stability_vars)
+function [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, ds_type, stability_vars)
 
 % Positions and Velocity Trajectories
 Xi_ref = Data(1:2,:);
@@ -37,17 +37,7 @@ if stability_vars.add_constr
             grad_lyap   = feval(stability_vars.grad_lyap_fun, chi_samples);
         case 'matrix'
             P_g = stability_vars.P_g;
-            P_l = stability_vars.P_l;
-        case 'hessian'
-            P_g = stability_vars.P_g;
-            P_l = stability_vars.P_l;
-            epsilon = 1e-10;
-            for m=1:M_chi
-                H_fQ_vars{m}     = sdpvar(N,N,'symmetric');
-                eig1_HfQ_vars{m} = sdpvar(1,1);
-                eig2_HfQ_vars{m} = sdpvar(1,1);
-            end
-            
+            P_l = stability_vars.P_l;            
     end
 end
 
@@ -72,13 +62,13 @@ elseif(angle_n < -pi)
 end
 
 % Check if it's going against the grain
-if angle_n > pi/2 || angle_n < -pi/2
-    h_set = 0;
-    corr_scale = 5;
-else
-    h_set = 1;
-    corr_scale = 1;
-end
+% if angle_n > pi/2 || angle_n < -pi/2
+%     h_set = 0;
+%     corr_scale = 5;
+% else
+%     h_set = 1;
+%     corr_scale = 1;
+% end
 
 % predefine A_d
 A_d = eye(N); b_d = -A_d*att_l;
@@ -145,6 +135,10 @@ if ds_type ~= 3
             % Compute local dynamics variables
             if h(j) >= 1; h_mod = 1;else; h_mod = h(j)*h_set;end
             A_L = h_mod*(Q*Lambda_l*Q') + (1-h_mod)*A_d_var;
+            % Gives same results, only difference is the way the Lyapunov
+            % condition is computed, either "indirectly" with the Gradient
+            % of the Lyapunov function given as a function handle
+            % or "directly" as defined in Eq (25)
             switch constraint_type
                 case 'full' % Lyapunov Constraint using gradient of lyapnuv function
                     
@@ -190,52 +184,11 @@ if ds_type ~= 3
                     chi_lyap_constr = (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
                         (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
                         (chi_samples(:,j) - att_l)'* Q_L *(chi_samples(:,j) - att_l);
-                    
-                    
-                case 'hessian'  % Lyapunov Constraint using Hessian of Q function                    
-                    % Compute Grouped Matrices
-                    Q_g  = A_g'*P_g + P_g*A_g;
-                    Q_gl = A_g'*P_l;
-                    Q_lg = A_L'*(2*P_g);
-                    Q_l  = A_L'*P_l;
-                    
-                    % Compute Local Lyapunov Component
-                    lyap_local =   (chi_samples(:,j) - att_g)'*P_l*(chi_samples(:,j) - att_l);
-                    
-                    % Computing activation term
-                    if lyap_local >= 0
-                        beta = 1;
-                    else
-                        beta = 0;
-                    end
-                    beta_l_2 = beta*2*lyap_local;
-                    
-                    % Computing Block Matrices
-                    Q_G = alpha(j) * ( Q_g + beta_l_2*Q_gl );
-                    Q_LG = (1-alpha(j))*( Q_lg + beta_l_2*Q_l );
-                    Q_GL = alpha(j)*beta_l_2*Q_gl;
-                    Q_L  = (1-alpha(j))*beta_l_2*Q_l;
-                    Q_LGL = Q_LG + Q_GL;
-                    
-                    % Constraint function
-                    H_fQ_vars{j}  = 2*Q_G + 2*(Q_LGL+Q_LGL') + 2*(Q_L+Q_L');
-                    
-%                     eig1_HfQ_vars{j} =   0.5*( (H_fQ_vars{j}(1,1) + H_fQ_vars{j}(2,2)) - sqrtm( (H_fQ_vars{j}(1,1) - H_fQ_vars{j}(2,2))^2 + 4*H_fQ_vars{j}(1,2)));
-%                     eig2_HfQ_vars{j} =   0.5*( (H_fQ_vars{j}(1,1) + H_fQ_vars{j}(2,2)) + sqrtm( (H_fQ_vars{j}(1,1) - H_fQ_vars{j}(2,2))^2 + 4*H_fQ_vars{j}(1,2)));                    
-                    eig_fun = @(x)sdpfun(x,'@(x)eig(x)');
-                    eigs_HfQ = eig_fun(H_fQ_vars{j});
-                    eig1_HfQ_vars{j} =   eigs_HfQ(1);
-                    eig2_HfQ_vars{j} =   eigs_HfQ(2);                    
-                    % Applying Constraints on Eigenvalues of Hessian                                                        
-                    Constraints = [Constraints eig1_HfQ_vars{j} <= -epsilon];
-                    Constraints = [Constraints eig2_HfQ_vars{j} <= -epsilon];
-%                     assign(eig1_HfQ_vars{j}, -20000);
-%                     assign(eig2_HfQ_vars{j}, -20000);
-                    
+                                                            
             end            
 
             % Violations
-%             total_lyap_constr_viol = total_lyap_constr_viol + (0.5 + 0.5*sign(chi_lyap_constr));
+            total_lyap_constr_viol = total_lyap_constr_viol + (0.5 + 0.5*sign(chi_lyap_constr));
                         
         end
         fprintf('done \n');
@@ -269,7 +222,6 @@ if ds_type ~= 3
     
     % Optimization result
     sol.info
-%     check(Constraints)
     fprintf('Total error: %2.2f\n', value(Objective));
     
     % Output Variables
@@ -279,66 +231,11 @@ if ds_type ~= 3
     A_d = value(A_d_var);
     b_d = value(b_d_var);
 
-%     if stability_vars.add_constr
-%         total_lyap_viol = value(total_lyap_constr_viol)        
-%     end
-    
-    
+    if stability_vars.add_constr
+        fprintf(2,'Total Lyapunov Constraint Violations %d \n',value(total_lyap_constr_viol));
+    end
+        
 else
     % Estimate the local dynamics as motion pattern mimicking
     [A_l, b_l] = optimal_Ac_from_data(Data, att_l, 0);
 end
-
-% 
-% % Check for stability
-% lyap_constr = zeros(1,M_chi);
-% for j = 1:M_chi
-%    
-%     % Compute local dynamics variables
-%     if h(j) >= 1
-%         h_mod = 1;
-%     else
-%         h_mod = h(j)*h_set;
-%     end
-%     A_L = h_mod*A_l + (1-h_mod)*A_d;
-%     
-%     % Computing full derivative
-%     lyap_constr(1,j) = alpha(j)*grad_lyap(:,j)' * (A_g) * (chi_samples(:,j) - att_g) + ...
-%                        (1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l) - corr_scale*lambda(j)* grad_h(:,j));
-%     
-% end
-% 
-% % Violations of Necessary Constraints
-% violations       = lyap_constr >= 0;
-% 
-% % Check Constraint Violation
-% if sum(violations) > 0 
-%     warning(sprintf('System is not stable.. %d Necessary (grad) Lyapunov Violations found', sum(violations)))
-% else
-%     fprintf('System is stable..')
-% end
-
-end
-
-%%%%%%%%%%%%%% Estimate Dynamics for locally deflective behavior %%%%%%%%%%%%%%
-%%% Stuff for deflective DS -- Compute angle between local and global DS %%%
-% att_vec     = att_g - att_l;
-% angle_w  = atan2(w_norm(2),w_norm(1))-atan2(w_perp(2),w_perp(1));
-% if angle_w < 0
-%     w_perp = -w_perp./norm(w_perp);
-% else
-%     w_perp = w_perp./norm(w_perp);
-% end
-% angle  = atan2(att_vec(2),att_vec(1))-atan2(w_perp(2),w_perp(1));
-% 
-% % put in a good range
-% if(angle > pi)
-%     angle = -(2*pi-angle);
-% elseif(angle < -pi)
-%     angle = 2*pi+angle;
-% end
-% theta = angle;
-
-% if (theta < -pi/2*0.8) && (theta > -pi/2*1.2)
-%     A_s = Q_l*[-min(diag(Lambda_l)) 0; 0 -10*min(diag(Lambda_l))]*Q_l';
-% end
