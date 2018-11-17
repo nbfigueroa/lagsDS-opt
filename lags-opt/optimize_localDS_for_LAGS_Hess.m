@@ -1,4 +1,4 @@
-function [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars)
+function [A_l, b_l, A_d, b_d, gamma] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars)
 
 % Positions and Velocity Trajectories
 Xi_ref = Data(1:2,:);
@@ -38,13 +38,11 @@ elseif(angle_n < -pi)
 end
 
 % Check if it's going against the grain
-% if angle_n > pi/2 || angle_n < -pi/2
-%     h_set = 0;
-%     corr_scale = 5;
-% else
-%     h_set = 1;
-%     corr_scale = 1;
-% end
+if angle_n > pi/2 || angle_n < -pi/2
+    h_set = 0;
+else
+    h_set = 1;
+end
 
 % predefine A_d
 A_d = eye(N); b_d = -A_d*att_l;
@@ -177,7 +175,7 @@ for m=1:M_chi
     % Symmetric form of Big Q (Compute analytically)       
     Big_Q_sym = [Q_G 0.5*Q_LGL'; 0.5*Q_LGL 0.5*(Q_L+Q_L')];    
         
-    % Hessian of Current Lyapunov-constraint function f_Q
+    % Hessian of Current Lyapunov function constrain
     A = Big_Q_sym(1:2,1:2);   B = Big_Q_sym(1:2,3:4); 
     B_T = Big_Q_sym(3:4,1:2); C = Big_Q_sym(3:4,3:4);   
     H_fQ = 2*A + 2*(B+B_T) + 2*C;

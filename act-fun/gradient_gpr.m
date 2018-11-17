@@ -30,7 +30,6 @@ for ii=1:M_test
     grad_gpr(:,ii) = grad_gpr_test;
 end
 
-
 % This is the actual prediction
 % Mu      = K(j,i) * beta;
 % grad_gpr = Mu;

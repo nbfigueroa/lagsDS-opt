@@ -40,6 +40,7 @@ if ~isempty(y)
         
     elseif strcmp(method,'gpml')
         
+        
         meanfunc     = {@meanZero};
         covfunc      = {@covSEiso}; 
         ell          = rbf_var;     % kernel width of RBF covariance function.
@@ -49,7 +50,6 @@ if ~isempty(y)
         hyp.cov      = log([ell; sf]);
         hyp.lik      = log(sn);
         [hy,Sigma]   = gp(hyp, @infExact, meanfunc, covfunc, @likGauss, X, y, X);
-    
     else
         
         error(['No such method defined: ' method]);
@@ -61,7 +61,6 @@ else
 % Test the model    
     
     if strcmp(method,'gdc')
-        
         [hy,Sigma]    = gaussian_process(model.X_train,model.y_train,X,epsilon,rbf_var);
         
     elseif strcmp(method,'gpml')
@@ -78,7 +77,6 @@ else
         
         
         [hy,Sigma]   = gp(hyp, @infExact, meanfunc, covfunc, @likGauss, model.X_train,model.y_train, X);      
-        
     else
         
         error(['No such method defined: ' method]);

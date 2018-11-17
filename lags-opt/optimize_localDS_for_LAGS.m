@@ -62,13 +62,11 @@ elseif(angle_n < -pi)
 end
 
 % Check if it's going against the grain
-% if angle_n > pi/2 || angle_n < -pi/2
-%     h_set = 0;
-%     corr_scale = 5;
-% else
-%     h_set = 1;
-%     corr_scale = 1;
-% end
+if angle_n > pi/2 || angle_n < -pi/2
+    h_set = 0;
+else
+    h_set = 1;
+end
 
 % predefine A_d
 A_d = eye(N); b_d = -A_d*att_l;

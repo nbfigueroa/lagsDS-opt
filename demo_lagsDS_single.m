@@ -114,7 +114,8 @@ grad_h_fun = @(x)grad_hyper_plane(x,w,h_fun);
 gauss_opt_thres = 0.25; 
 
 % Activation function
-radius_fun       = @(x)(1 - my_exp_loc_act(1, att_g, x));
+c_rad       = 50;
+radius_fun  = @(x)(1 - my_exp_loc_act(c_rad, att_g, x));
 
 % alpha(\xi) -> Gaussian Basis Function
 scale = 1; rel_eig = 0.25;
@@ -134,7 +135,7 @@ while activ_fun(att_l) > gauss_opt_thres
 end
 
 %% Plot values of mixing function to see where transition occur
-with_robot = 1;
+with_robot = 0;
 if with_robot
     % set up a simple robot and a figure that plots it
     robot = create_simple_robot();
@@ -159,7 +160,7 @@ h_dec = plot_mixing_fct_2d(limits, alpha_fun); hold on;
 % Position/Velocity Trajectories
 vel_samples = 10; vel_size = 0.5; 
 hold on;
-[h_data, h_att, h_vel] = plot_reference_trajectories_DS(Data, att_g, vel_samples, vel_size, fig1);
+[h_data, h_att, h_vel] = plot_reference_trajectories_on_DS(Data, att_g, vel_samples, vel_size, fig1);
 text(att_g(1),att_g(2),'$\mathbf{\xi}^*_g$','Interpreter', 'LaTex','FontSize',15); hold on;
 
 h_att = scatter(att_l(1),att_l(2),150,[0 0 0],'d','Linewidth',2); hold on;
@@ -187,7 +188,7 @@ grad_lyap_fun = @(x)gradient_lyapunov(x, att_g, att_l, P_g, P_l);
 
 %%%%%%%%%%%%%%%%%%% DS PARAMETER INITIALIZATION %%%%%%%%%%%%%%%%%%%
 % Global Dynamics type
-fg_type = 0;          % 0: Fixed Linear system Axi + b
+fg_type = 1;          % 0: Fixed Linear system Axi + b
                       % 1: Estimated Linear system Axi + b
 % Local Dynamics type
 fl_type = 1;  % 1: Symmetrically converging to ref. trajectory
@@ -213,9 +214,9 @@ else
 end
 
 % Stability Checks
-Q_g  = A_g'*P_g + P_g*A_g
+Q_g  = A_g'*P_g + P_g*A_g;
 lambda_Qg = eig(Q_g)
-Q_gl = A_g'*P_l' 
+Q_gl = A_g'*P_l';
 lambda_Qgl = eig(Q_gl)
 
 % Local Attractor diffusive function component
@@ -239,18 +240,22 @@ stability_vars.add_constr      = 1; % 0: no stability constraints
 if stability_vars.add_constr   
     
     % Draw Initial set of samples for point-wise stability constraints
-    desired_samples = 100;
-    chi_samples = draw_chi_samples (Sigma,Mu,desired_samples,activ_fun);
-        
+    % 50 equidistant samples on the boundary and 50 randomly sampled inside
+    desired_samples       = 50;
+    desired_alpha_contour = 0.95;
+    desired_Gauss_contour = -Norm*(desired_alpha_contour-1);
+    chi_samples_b = draw_chi_samples (Sigma,Mu,desired_samples,activ_fun, 'isocontours', desired_Gauss_contour);
+    chi_samples_i = draw_chi_samples (Sigma,Mu,2*desired_samples,activ_fun);
+    chi_samples = [chi_samples_b chi_samples_i] ;
+    
     % Function handles for contraint evaluation
     stability_vars.chi_samples   = chi_samples;
     stability_vars.alpha_fun     = alpha_fun;
     stability_vars.h_fun         = h_fun;
     stability_vars.lambda_fun    = lambda_fun;
-    
-    
+        
     % Type of constraint to evaluate
-    stability_vars.constraint_type = 'hessian';    % options: 'full/matrix/hessian'
+    stability_vars.constraint_type = 'matrix';    % options: 'full/matrix/hessian'
     
     % Variable for each type
     if strcmp(stability_vars.constraint_type,'full')
@@ -262,27 +267,43 @@ if stability_vars.add_constr
                 
     % Local DS Optimization with Constraint Rejection Sampling
     num_violations = 1; iter = 1;
-    while num_violations > 0
+%     while num_violations > 0             
+        
         fprintf('Iteration %d, using %d chi-samples..\n', iter, size(chi_samples,2));
         stability_vars.chi_samples   = chi_samples;
  
         if strcmp(stability_vars.constraint_type,'hessian')
-            [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars);
+            % Approximate - very conservative estimation
+            [A_l, b_l, A_d, b_d, gamma] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars);
         else
+            % Full condition - less conservative estimation
             [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
         end
+
+        % Create function handle for current estimate of f_Q
+        clear f_Q
+        f_Q = @(x)fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
+                
+        % Plot Current Lyapunov Constraints function fQ
+        chi_min = min(chi_samples,[],2);
+        chi_max = max(chi_samples,[],2);
+        limits = [chi_min(1) chi_max(1) chi_min(2) chi_max(2)];        
+        plot_lyap_fct(f_Q,1,limits,'$f_Q(\xi)$',1);        hold on;
+        if exist('h_samples','var'); delete(h_samples);  end
+        h_samples = scatter(chi_samples(1,:),chi_samples(2,:),'+','c');
+               
         
-        %%%% Check for violations in compact set %%%%        
-        fprintf(2, 'Checking violation of Lyapunov Constraint.. ');
-        clear lyap_der
-        lyap_der = @(x)lyapunov_combined_derivative_full(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, lambda_fun, grad_h_fun, A_g, A_l, A_d);
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%%% OPTION 1: Check for violations in compact set by sampling 50k points %%%%
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        fprintf(2, 'Checking violation of Lyapunov Constraint on 50k Samples.. ');
         
-        % Samples to evaluate
+        % Randomly Sample Points to evaluate
         desired_test_samples = 50000;
         chi_samples_test = draw_chi_samples (Sigma,Mu,desired_test_samples,activ_fun);
         
         % Evaluate Samples
-        necc_lyap_constr = lyap_der(chi_samples_test);
+        necc_lyap_constr = f_Q(chi_samples_test);
         
         % Necessary Constraints
         necc_violations = necc_lyap_constr >= 0;
@@ -290,9 +311,10 @@ if stability_vars.add_constr
         num_violations = size(necc_violating_points,2);                                
         fprintf(2, '. done. \n');
         
-        % If violations sample new contraint-eval points
+        % If we still have violations sample new contraints-eval points
+        chi_samples_used = chi_samples;
         if num_violations > 0
-            fprintf(2, 'Violations for Lyapunov Constraint %d..\n', num_violations);
+            fprintf(2, '%d violations of Lyapunov Constraint!!\n', num_violations);
             if num_violations < 10
                 chi_samples = [chi_samples necc_violating_points];
             else
@@ -300,19 +322,147 @@ if stability_vars.add_constr
                 new_chi_samples = necc_violating_points(:,randsample(num_violations,num_new_samples));
                 chi_samples = [chi_samples new_chi_samples];
             end
+            hold on;
+%             if exist('h_samples_viol','var'); delete(h_samples_viol);  end
+%             h_samples_viol = scatter(necc_violating_points(1,:),necc_violating_points(2,:),0.5,'o','r');
+            
         else
             fprintf('Optimization converged...\n');
-        end                
+        end        
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %%%% OPTION 2: Check for violations in compact with Newton Method on current function %%%%
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%        
+
+        % Create equidistant (and edge) samples for surrogate function
+        % Creating edge samples
+        chi_edges_1      = [chi_min chi_max];
+        chi_edges_2      = [chi_edges_1(1,:);  chi_edges_1(2,2) chi_edges_1(2,1)];
+        chi_edges        = [chi_edges_1  chi_edges_2];
+        chi_samples_surr = [chi_samples_used chi_edges chi_samples_test(:,randsample(length(chi_samples_test),100))];        
+        
+        % Creating equidistant samples from different isocontours
+        desired_samples       = 10;
+        desired_alpha_contour = 0.95;
+        alpha_step = 0.15;
+        while desired_alpha_contour > 0
+            desired_Gauss_contour = -Norm*(desired_alpha_contour-1);
+            chi_samples_iso = draw_chi_samples (Sigma,Mu,desired_samples,activ_fun, 'isocontours', desired_Gauss_contour);
+            chi_samples_surr = [chi_samples_surr chi_samples_iso];
+            desired_alpha_contour = desired_alpha_contour - alpha_step;
+        end        
+        fprintf('Using %d samples to create surrogate function \n',length(chi_samples_surr))
+        
+        % Find optimal hyper-parameters for surrogate function (GPR)
+        model = [];
+        model.X_train = chi_samples_surr';
+        model.y_train = f_Q(chi_samples_surr)';                
+        meanfunc   = {@meanZero};
+        covfunc    = {@covSEiso};
+        likfunc    = @likGauss;
+        hyp        = struct('mean', [], 'cov', [0 0], 'lik', -1);
+        hyp_opt    = minimize(hyp, @gp, -100, @infLaplace, meanfunc, covfunc, likfunc, model.X_train, model.y_train);
+        
+        % Create Surrogate function \hat(f_Q) = E{p(f_Q|\xi)}
+        rbf_width = exp(hyp_opt.cov(1)); epsilon = 0.001;
+        surr_fQ    = @(x) my_gpr(x',[],model,epsilon,rbf_width);
+        
+        % Plot surrogate function
+        plot_lyap_fct(surr_fQ, 1, limits,'Surrogate $f_Q(\xi)$',1);        hold on;
+        h_samples_s = scatter(chi_samples_surr(1,:),chi_samples_surr(2,:),'+','c');
+        
+        %%%%% Implement Newton Method to find maxima in compact set (on Surrogate function!)  %%%%%
+        % Create gradient handle of surrogate function
+        grad_surr_fQ   = @(x)gradient_gpr(x, model, epsilon, rbf_width);        
+        
+        %%%%%%% Maxima Search Option A: Gradient Ascent
+        ga_options = [];
+        ga_options.gamma    = 0.001;  % step size (learning rate)
+        ga_options.max_iter = 1500;   % maximum number of iterations
+        ga_options.f_tol    = 1e-10;  % termination tolerance for F(x)
+        ga_options.plot     = 1;      % plot init/final and iterations
+        ga_options.verbose  = 0;      % Show values on iterations
+        
+        % Initial value
+        x0 = Mu;
+%         x0 = chi_samples_used(:,50+randsample(2*desired_samples,1));
+        fprintf('Finding maxima in Chi using Gradient Ascent...\n');        
+        [f_max, x_max, fvals, xvals, h_points] = gradientAscent(surr_fQ,grad_surr_fQ,x0, ga_options);   
+        real_fmax = f_Q(x_max);
+        fprintf('Maxima of surrogate function (hat(f)_max = %2.5f, f_max = %2.5f)found at x=%2.5f,y=%2.5f \n',f_max,real_fmax,x_max(1),x_max(2));                
+        if real_fmax > 0
+            fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', real_fmax);
+        else
+            fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
+        end
+                      
+        %%%%%%% Maxima Search Option B: Newton Method
+%         nm_options = [];
+%         nm_options.max_iter = 1500;   % maximum number of iterations
+%         nm_options.f_tol    = 1e-10;  % termination tolerance for F(x)
+%         nm_options.plot     = 1;      % plot init/final and iterations
+%         nm_options.verbose  = 1;      % Show values on iterations
+%         
+%         % Initial value
+%         x0 = Mu;
+%         x0 = chi_samples_used(:,50+randsample(2*desired_samples,1));
+%         fprintf('Finding maxima in Chi using Newton Method...\n');        
+%         
+%         % Create hessian handle of surrogate function
+%         hess_surr_fQ   = @(x)hessian_gpr(x, model, epsilon, rbf_width);        
+%         [f_max, x_max, fvals, xvals, h_points] = newtonMethod(surr_fQ, grad_surr_fQ, hess_surr_fQ, x0, nm_options)                
+%         real_fmax = f_Q(x_max);
+%         fprintf('Maxima of surrogate function (hat(f)_max = %2.5f, f_max = %2.5f)found at x=%2.5f,y=%2.5f \n',f_max,real_fmax,x_max(1),x_max(2));                
+%         if real_fmax > 0
+%             fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', real_fmax);
+%         else
+%             fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
+%         end
+%                 
+        % Outer loop iteration
         iter = iter + 1;
     end
-else
-    tic;
-    [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
-    toc;
-end
+% else
+%     tic;
+%     [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
+%     toc;
+% end
 
 Lambda_l = eig(A_l)
 kappa = max(abs(Lambda_l))/min(abs(Lambda_l))
+
+
+%% Testing newton method
+
+% Plot surrogate function
+plot_lyap_fct(surr_fQ, 1, limits,'Surrogate $f_Q(\xi)$',1);        hold on;
+h_samples_s = scatter(chi_samples_surr(1,:),chi_samples_surr(2,:),'+','c');
+
+%%%%%%% Maxima Search Option B: Newton Method
+nm_options = [];
+nm_options.max_iter = 500;   % maximum number of iterations
+nm_options.f_tol    = 1e-10;  % termination tolerance for F(x)
+nm_options.plot     = 1;      % plot init/final and iterations
+nm_options.verbose  = 1;      % Show values on iterations
+
+% Initial value
+x0 = Mu;
+% x0 = chi_samples_used(:,50+randsample(2*desired_samples,1));
+fprintf('Finding maxima in Chi using Newton Method...\n');
+
+% Create hessian handle of surrogate function
+hess_surr_fQ   = @(x)hessian_gpr(x, model, epsilon, rbf_width);
+
+[f_max, x_max, fvals, xvals, h_points] = newtonMethod(surr_fQ, grad_surr_fQ, hess_surr_fQ, x0, nm_options);
+real_fmax = f_Q(x_max);
+
+fprintf('Maxima of surrogate function (hat(f)_max = %2.5f, f_max = %2.5f)found at x=%2.5f,y=%2.5f \n',f_max,real_fmax,x_max(1),x_max(2));
+if real_fmax > 0
+    fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', real_fmax);
+else
+    fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
+end
+
 
 %% Post-learning Numerical Stability Check using full Lyapunov Derivative
 % Function for Lyap-Der evaluation
