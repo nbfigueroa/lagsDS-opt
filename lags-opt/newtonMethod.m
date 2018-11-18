@@ -15,10 +15,29 @@ fvals (iter)   = f(x);
 converged = 0;
 tic;
 while iter < max_iter && ~converged    
-    iter = iter + 1;    
+    iter = iter + 1;
+    % Compute Hessian of current point
+    H_f = hess_f(x)
+    g_f = grad_f(x);
+       
+    % Eigendecomposition of Hessian
+    [V, L] =  eig(H_f);   
+    
+    % If Hessian is indefinite correct it
+    pos_eig = sum(diag(L) > 0);
+    if pos_eig > 0
+       fprintf('Saddle point! Change Hessian!\n');
+       L_abs = diag(abs(L));
+       L_min = min(L_abs);
+       L_abs = L_abs./L_min;
+       H_f_bar = V * diag(-L_abs) *V';
+       
+    else
+       H_f_bar =  H_f; 
+    end
     
     % Newton Iteration
-    x = x - 0.01*(hess_f(x)\grad_f(x));                      
+    x = x - (H_f_bar\g_f);                      
     
     % Check progress
     f_current = f(x);
@@ -37,11 +56,11 @@ while iter < max_iter && ~converged
     xvals (:,iter) = x;
 end
 toc;
-fprintf('Found Maxima of function with value f=%2.2f \n',fvals(end));
 
 % Final values
 x_max = xvals(:,end);
 f_max = fvals(:,end);
+fprintf('Found Maxima of function (x=%2.3f, y=%2.3f) at iter=%d with value f=%2.2f \n',x_max(1), x_max(2), iter, f_max);
 
 if do_plot
     h_points = scatter(x_max(1),x_max(2),70,[1 1 1],'filled');

@@ -134,6 +134,12 @@ while activ_fun(att_l) > gauss_opt_thres
     alpha_fun  = @(x)( (1-radius_fun(x)).*activ_fun(x)' + radius_fun(x));
 end
 
+% Compute gradients
+grad_radius_fun = @(x)grad_lambda_fun(x, c_rad, att_g);
+gauss_fun       = @(x)my_gaussPDF(x, Mu, Sigma);
+grad_gauss_fun  = @(x)grad_gauss_pdf(x, Mu, Sigma);
+grad_alpha_fun  = @(x)((1/Norm).*gradient_alpha_fun(x,radius_fun, grad_radius_fun, gauss_fun, grad_gauss_fun, 'gauss'));
+
 %% Plot values of mixing function to see where transition occur
 with_robot = 0;
 if with_robot
@@ -288,7 +294,7 @@ if stability_vars.add_constr
         chi_min = min(chi_samples,[],2);
         chi_max = max(chi_samples,[],2);
         limits = [chi_min(1) chi_max(1) chi_min(2) chi_max(2)];        
-        plot_lyap_fct(f_Q,1,limits,'$f_Q(\xi)$',1);        hold on;
+        plot_lyap_fct(f_Q,0,limits,'$f_Q(\xi)$',1);        hold on;
         if exist('h_samples','var'); delete(h_samples);  end
         h_samples = scatter(chi_samples(1,:),chi_samples(2,:),'+','c');
                
@@ -368,7 +374,7 @@ if stability_vars.add_constr
         surr_fQ    = @(x) my_gpr(x',[],model,epsilon,rbf_width);
         
         % Plot surrogate function
-        plot_lyap_fct(surr_fQ, 1, limits,'Surrogate $f_Q(\xi)$',1);        hold on;
+        plot_lyap_fct(surr_fQ, 0, limits,'Surrogate $f_Q(\xi)$',1);        hold on;
         h_samples_s = scatter(chi_samples_surr(1,:),chi_samples_surr(2,:),'+','c');
         
         %%%%% Implement Newton Method to find maxima in compact set (on Surrogate function!)  %%%%%
@@ -395,30 +401,7 @@ if stability_vars.add_constr
         else
             fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
         end
-                      
-        %%%%%%% Maxima Search Option B: Newton Method
-%         nm_options = [];
-%         nm_options.max_iter = 1500;   % maximum number of iterations
-%         nm_options.f_tol    = 1e-10;  % termination tolerance for F(x)
-%         nm_options.plot     = 1;      % plot init/final and iterations
-%         nm_options.verbose  = 1;      % Show values on iterations
-%         
-%         % Initial value
-%         x0 = Mu;
-%         x0 = chi_samples_used(:,50+randsample(2*desired_samples,1));
-%         fprintf('Finding maxima in Chi using Newton Method...\n');        
-%         
-%         % Create hessian handle of surrogate function
-%         hess_surr_fQ   = @(x)hessian_gpr(x, model, epsilon, rbf_width);        
-%         [f_max, x_max, fvals, xvals, h_points] = newtonMethod(surr_fQ, grad_surr_fQ, hess_surr_fQ, x0, nm_options)                
-%         real_fmax = f_Q(x_max);
-%         fprintf('Maxima of surrogate function (hat(f)_max = %2.5f, f_max = %2.5f)found at x=%2.5f,y=%2.5f \n',f_max,real_fmax,x_max(1),x_max(2));                
-%         if real_fmax > 0
-%             fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', real_fmax);
-%         else
-%             fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
-%         end
-%                 
+
         % Outer loop iteration
         iter = iter + 1;
     end
@@ -440,7 +423,7 @@ h_samples_s = scatter(chi_samples_surr(1,:),chi_samples_surr(2,:),'+','c');
 
 %%%%%%% Maxima Search Option B: Newton Method
 nm_options = [];
-nm_options.max_iter = 500;   % maximum number of iterations
+nm_options.max_iter = 2;   % maximum number of iterations
 nm_options.f_tol    = 1e-10;  % termination tolerance for F(x)
 nm_options.plot     = 1;      % plot init/final and iterations
 nm_options.verbose  = 1;      % Show values on iterations
@@ -462,7 +445,6 @@ if real_fmax > 0
 else
     fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
 end
-
 
 %% Post-learning Numerical Stability Check using full Lyapunov Derivative
 % Function for Lyap-Der evaluation

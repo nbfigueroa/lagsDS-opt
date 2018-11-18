@@ -39,11 +39,11 @@ while iter < max_iter && ~converged
     xvals (:,iter) = x;
 end
 toc;
-fprintf('Found Maxima of function with value f=%2.2f \n',fvals(end));
 
 % Final values
 x_max = xvals(:,end);
 f_max = fvals(:,end);
+fprintf('Found Maxima of function (x=%2.3f, y=%2.3f) at iter=%d with value f=%2.2f \n',x_max(1), x_max(2), iter, f_max);
 
 if do_plot
     h_points = scatter(x_max(1),x_max(2),70,[1 1 1],'filled');
