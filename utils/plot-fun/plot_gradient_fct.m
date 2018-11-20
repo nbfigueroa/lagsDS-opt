@@ -1,6 +1,7 @@
 function [h] = plot_gradient_fct(grad_fun, limits, title_string)
 
-nx = 50; ny = 50;
+% nx = 50; ny = 50;
+nx = 40; ny = 40;
 axlim = limits;
 ax_x=linspace(axlim(1)*0.99,axlim(2)*0.99,nx); % computing the mesh points along each axis
 ax_y=linspace(axlim(3)*0.99,axlim(4)*0.99,ny); % computing the mesh points along each axis

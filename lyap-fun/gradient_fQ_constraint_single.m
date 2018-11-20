@@ -6,6 +6,7 @@ function [grad_fQ] = gradient_fQ_constraint_single(x, att_g, att_l, P_global, P_
 alpha       = feval(alpha_fun,x);
 grad_alpha  = feval(grad_alpha_fun,x);
 h           = feval(h_fun,x);
+grad_h      = feval(grad_h_fun,x);
 
 % Check incidence angle at local attractor
 w = grad_h_fun(att_l);
@@ -66,7 +67,31 @@ for i = 1:M
     grad_global_second =   2*Q_g*x_g + 2*beta*( 2*lyap_local*Q_gl*x_g  + ...
                            ((x_g'*P_local) + (x_l'*P_local))'*(x_g'*Q_gl*x_g));
     grad_fQ_g = grad_alpha(:,i)*grad_global_first + alpha(i)*grad_global_second;
-    grad_fQ(:,i) = grad_fQ_g;    
+    
+    % Computing gradient of interaction term
+    grad_alpha_V_l = grad_alpha(:,i)*lyap_local + alpha(i)*((x_g'*P_local) + (x_l'*P_local))';
+    grad_alphabar_V_l = -grad_alpha(:,i)*lyap_local + (1-alpha(i))*((x_g'*P_local) + (x_l'*P_local))';
+    grad_lg_1   = 2*beta*(grad_alpha_V_l* (x_l'*Q_gl*x_g) + (alpha(i)*lyap_local)*((x_g'*Q_gl') + (x_l'*Q_gl))');
+    
+    grad_lg_2   = -grad_alpha(:,i)*(x_l'*Q_lg'*x_g) + 2*(1-alpha(i))*(grad_h(:,i)*(x_l'*(A_l'*P_global)*x_g) + ...
+                   h(i)*(x_g'*(P_global*A_l) + x_l'*(A_l'*P_global))'  -grad_h(:,i)*(x_l'*(A_d'*P_global)*x_g) + ...
+                   (1-h(i))*(x_g'*(P_global*A_d) + x_l'*(A_d'*P_global))' );
+    
+    grad_lg_3  = 2*beta*(grad_alphabar_V_l*(x_l'*Q_l*x_g) +  (1-alpha(i))*lyap_local*(grad_h(:,i)*(x_l'*(A_l'*P_local)*x_g) + ...          
+                 h(i)*(x_g'*(P_local*A_l) + x_l'*(A_l'*P_local))' -grad_h(:,i)*(x_l'*(A_d'*P_local)*x_g) + ...
+                 (1-h(i)*(x_g'*(P_local*A_d) + x_l'*(A_d'*P_local))' )));
+    
+    grad_fQ_lg = grad_lg_1 + grad_lg_2 + grad_lg_3;
+    
+    % Computing gradient of local term
+    
+    grad_local_1  = 2*beta*(1-alpha(i))*lyap_local;
+    grad_local_2  = grad_h(:,i)*(x_l'*(A_l'*P_local)*x_l) + h(i)*( (x_l'*(P_local*A_l)) + (x_l'*(A_l'*P_local)))' ...
+                  -grad_h(:,i)*(x_l'*(A_d'*P_local)*x_l) + (1-h(i))*((x_l'*(P_local*A_d)) + (x_l'*(A_d'*P_local)))';    
+    grad_fQ_l     = grad_local_1*(x_l'*Q_l*x_l) + lyap_local*(1-alpha(i))*grad_local_2 ;
+    
+    % Sum of all terms
+    grad_fQ(:,i) = grad_fQ_g + grad_fQ_lg +  grad_fQ_l;    
 
 end
 

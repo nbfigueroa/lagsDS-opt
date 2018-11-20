@@ -1,5 +1,6 @@
 function [hess_gpr] = hessian_gpr(x, model, epsilon, rbf_var)
-%% Get Dimension and number of data points
+%% Implementation of hessian of GPR.. not sure it is correct... will check with a simpler set of points
+% Get Dimension and number of data points
 X_train = model.X_train';
 y_train = model.y_train';
 

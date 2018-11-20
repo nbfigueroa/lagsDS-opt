@@ -66,8 +66,7 @@ for i = 1:M
 
     % Block Matrix
     xi_aug  = [x(:,i) - att_g; x(:,i) - att_l];
-%     Big_Q   = [Q_G Q_GL; Q_LG Q_L];
-    Big_Q   = [Q_G zeros(2,2); zeros(2,2) zeros(2,2)];
+    Big_Q   = [Q_G Q_GL; Q_LG Q_L];
    
     % LMI format of Lyapunov Derivative
     f_Q(1,i) = xi_aug'*Big_Q*xi_aug;    

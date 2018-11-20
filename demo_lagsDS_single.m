@@ -192,7 +192,7 @@ grad_lyap_fun = @(x)gradient_lyapunov(x, att_g, att_l, P_g, P_l);
 %% %%%% Step 3: ESTIMATE Global and Local System Matrices     %%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%%%%%%%%%%%%%%%%%% DS PARAMETER INITIALIZATION %%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%  GLOBAL DS PARAMETER INITIALIZATION %%%%%%%%%%%%%%
 % Global Dynamics type
 fg_type = 1;          % 0: Fixed Linear system Axi + b
                       % 1: Estimated Linear system Axi + b
@@ -229,191 +229,130 @@ lambda_Qgl = eig(Q_gl)
 breadth_mod = 15;
 lambda_fun = @(x)lambda_mod_fun(x, breadth_mod, att_l, grad_h_fun, grad_lyap_fun);
 
-%% Option 1: Estimate Local Dynamics from Data by minimizing velocity error with given tracking/known factor
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Option 1: Unconstrained Local-Dynamics Estimation, given known \kappa %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 kappa = 500
 [A_l, b_l, A_d, b_d] = estimate_localDS_known_gamma(Data, A_g,  att_g, att_l, fl_type, kappa,w, P_g, P_l, Q);
 Lambda_l = eig(A_l)
 kappa = max(abs(Lambda_l))/min(abs(Lambda_l))
 
-%% Option 2: Estimate Local Dynamics by max. tracking factor + min. velocity mse
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Option 2: Un/Constrained Local-Dynamics Estimation, estimating \kappa %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%  LOCAL DS OPTIMIZATION OPTIONS %%%%%%%%%%%%%%%%%
 % Construct variables and function handles for stability constraints
 clear stability_vars 
 stability_vars.solver          = 'fmincon'; % options: 'baron' or 'fmincon'
 stability_vars.grad_h_fun      = grad_h_fun;
 stability_vars.add_constr      = 1; % 0: no stability constraints
-                                    % 1: Adding sampled stability constraints
+                                    % 1: Adding sampled stability constraints                                   
+% Type of constraint to evaluate
+stability_vars.constraint_type = 'matrix';  % options: 'full/matrix/hessian'
+stability_vars.do_plots        = 1;         % plot current lyapunov constr. 
+stability_vars.init_samples    = 50;        % Initial num/boundary samples
 
-if stability_vars.add_constr   
-    
+% Function handles for contraint evaluation
+stability_vars.alpha_fun     = alpha_fun;
+stability_vars.activ_fun     = activ_fun;
+stability_vars.h_fun         = h_fun;
+stability_vars.lambda_fun    = lambda_fun;    
+
+% Variable for different type constraint types
+if strcmp(stability_vars.constraint_type,'full')
+    stability_vars.grad_lyap_fun = grad_lyap_fun;
+else
+    stability_vars.P_l           = P_l;
+    stability_vars.P_g           = P_g;
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+if stability_vars.add_constr    
     % Draw Initial set of samples for point-wise stability constraints
-    % 50 equidistant samples on the boundary and 50 randomly sampled inside
-    desired_samples       = 50;
+    desired_samples       = stability_vars.init_samples;
     desired_alpha_contour = 0.95;
     desired_Gauss_contour = -Norm*(desired_alpha_contour-1);
-    chi_samples_b = draw_chi_samples (Sigma,Mu,desired_samples,activ_fun, 'isocontours', desired_Gauss_contour);
-    chi_samples_i = draw_chi_samples (Sigma,Mu,2*desired_samples,activ_fun);
-    chi_samples = [chi_samples_b chi_samples_i] ;
+    chi_samples = draw_chi_samples (Sigma,Mu,desired_samples, stability_vars.activ_fun, 'isocontours', desired_Gauss_contour);        
     
-    % Function handles for contraint evaluation
-    stability_vars.chi_samples   = chi_samples;
-    stability_vars.alpha_fun     = alpha_fun;
-    stability_vars.h_fun         = h_fun;
-    stability_vars.lambda_fun    = lambda_fun;
-        
-    % Type of constraint to evaluate
-    stability_vars.constraint_type = 'matrix';    % options: 'full/matrix/hessian'
-    
-    % Variable for each type
-    if strcmp(stability_vars.constraint_type,'full')
-        stability_vars.grad_lyap_fun = grad_lyap_fun;
-    else 
-        stability_vars.P_l           = P_l;
-        stability_vars.P_g           = P_g;
+    fprintf('First iteration, using %d BOUNDARY chi-samples..\n', iter, size(chi_samples,2));    
+    stability_vars.chi_samples = chi_samples;
+    if strcmp(stability_vars.constraint_type,'hessian')
+        % Approximate - very conservative estimation
+        [A_l, b_l, A_d, b_d, gamma] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars);
+    else
+        % Full condition - less conservative estimation
+        [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
     end
-                
+    
+    % Create function handles for current estimate of f_Q, grad_fQ
+    clear f_Q grad_fQ
+    f_Q = @(x)fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
+    grad_fQ = @(x)gradient_fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, grad_alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
+        
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%% OPTION 1: Check for violations in compact set by grid-sampling  %%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    
+    % Plot Current Lyapunov Constraints function fQ
+    if stability_vars.do_plots
+        plot_lyap_fct(f_Q, 1, limits_,'Test $f_Q(\xi)$ with Grid-Sampling',1);        hold on;
+        if exist('h_samples_used','var'); delete(h_samples_used);  end
+        h_samples_used = scatter(chi_samples(1,:),chi_samples(2,:),'+','c');
+    end
+    cv_options                   = [];
+    cv_options.type              = 'grid';
+    cv_options.chi_params        = struct('Mu',Mu,'Sigma',Sigma);
+    cv_options.num_samples       = 50000;
+    tic;
+    [constraint_violations_grid, max_fQ, max_x] = search_constraintViolations(f_Q, activ_fun, cv_options);
+    toc;
+
+    % If we still have violations sample new contraints-eval points
+    test_grid = 0;
+    if max_fQ > 0
+        fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', max_fQ);
+    else
+        fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n', max_fQ);
+        test_grid = 1;
+    end    
+    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %%%% OPTION 2: Find maxima in compact set with Gradient Ascent on current fQ() %%%%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%   
+    % Plot Current Lyapunov Constraints function fQ
+    if stability_vars.do_plots
+        plot_lyap_fct(f_Q, 1, limits_,'Test $f_Q(\xi)$ with Maxima Search (Optimization)',1); hold on;
+    end
+    cv_options                   = [];
+    cv_options.type              = 'grad_ascent';
+    cv_options.num_ga_trials     = 20;
+    cv_options.do_plots          = 1;
+    tic;
+    [constraint_violations_grad, max_fQ, max_x] = search_constraintViolations(f_Q, activ_fun, cv_options);
+    toc;
+    
+    [opt_Fmax, id_max] = max(opt_fmax);
+    opt_Xmax = opt_xmax(:,id_max);
+    if opt_Fmax > 0
+        fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', opt_Fmax);
+    else
+        fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n', opt_Fmax);
+    end
+        
     % Local DS Optimization with Constraint Rejection Sampling
-    num_violations = 1; iter = 1;
-%     while num_violations > 0             
-        
-        fprintf('Iteration %d, using %d chi-samples..\n', iter, size(chi_samples,2));
-        stability_vars.chi_samples   = chi_samples;
- 
-        if strcmp(stability_vars.constraint_type,'hessian')
-            % Approximate - very conservative estimation
-            [A_l, b_l, A_d, b_d, gamma] = optimize_localDS_for_LAGS_Hess(Data, A_g, att_g, stability_vars);
-        else
-            % Full condition - less conservative estimation
-            [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
-        end
-
-        % Create function handle for current estimate of f_Q
-        clear f_Q
-        f_Q = @(x)fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
-                
-        % Plot Current Lyapunov Constraints function fQ
-        chi_min = min(chi_samples,[],2);
-        chi_max = max(chi_samples,[],2);
-        limits = [chi_min(1) chi_max(1) chi_min(2) chi_max(2)];        
-        plot_lyap_fct(f_Q,0,limits,'$f_Q(\xi)$',1);        hold on;
-        if exist('h_samples','var'); delete(h_samples);  end
-        h_samples = scatter(chi_samples(1,:),chi_samples(2,:),'+','c');
-               
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %%%% OPTION 1: Check for violations in compact set by sampling 50k points %%%%
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        fprintf(2, 'Checking violation of Lyapunov Constraint on 50k Samples.. ');
-        
-        % Randomly Sample Points to evaluate
-        desired_test_samples = 50000;
-        chi_samples_test = draw_chi_samples (Sigma,Mu,desired_test_samples,activ_fun);
-        
-        % Evaluate Samples
-        necc_lyap_constr = f_Q(chi_samples_test);
-        
-        % Necessary Constraints
-        necc_violations = necc_lyap_constr >= 0;
-        necc_violating_points = chi_samples_test(:,necc_violations);
-        num_violations = size(necc_violating_points,2);                                
-        fprintf(2, '. done. \n');
-        
-        % If we still have violations sample new contraints-eval points
-        chi_samples_used = chi_samples;
-        if num_violations > 0
-            fprintf(2, '%d violations of Lyapunov Constraint!!\n', num_violations);
-            if num_violations < 10
-                chi_samples = [chi_samples necc_violating_points];
-            else
-                num_new_samples = ceil(num_violations/5);
-                new_chi_samples = necc_violating_points(:,randsample(num_violations,num_new_samples));
-                chi_samples = [chi_samples new_chi_samples];
-            end
-            hold on;
-%             if exist('h_samples_viol','var'); delete(h_samples_viol);  end
-%             h_samples_viol = scatter(necc_violating_points(1,:),necc_violating_points(2,:),0.5,'o','r');
-            
-        else
-            fprintf('Optimization converged...\n');
-        end        
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %%%% OPTION 2: Check for violations in compact with Newton Method on current function %%%%
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%        
-
-        % Create equidistant (and edge) samples for surrogate function
-        % Creating edge samples
-        chi_edges_1      = [chi_min chi_max];
-        chi_edges_2      = [chi_edges_1(1,:);  chi_edges_1(2,2) chi_edges_1(2,1)];
-        chi_edges        = [chi_edges_1  chi_edges_2];
-        chi_samples_surr = [chi_samples_used chi_edges chi_samples_test(:,randsample(length(chi_samples_test),100))];        
-        
-        % Creating equidistant samples from different isocontours
-        desired_samples       = 10;
-        desired_alpha_contour = 0.95;
-        alpha_step = 0.15;
-        while desired_alpha_contour > 0
-            desired_Gauss_contour = -Norm*(desired_alpha_contour-1);
-            chi_samples_iso = draw_chi_samples (Sigma,Mu,desired_samples,activ_fun, 'isocontours', desired_Gauss_contour);
-            chi_samples_surr = [chi_samples_surr chi_samples_iso];
-            desired_alpha_contour = desired_alpha_contour - alpha_step;
-        end        
-        fprintf('Using %d samples to create surrogate function \n',length(chi_samples_surr))
-        
-        % Find optimal hyper-parameters for surrogate function (GPR)
-        model = [];
-        model.X_train = chi_samples_surr';
-        model.y_train = f_Q(chi_samples_surr)';                
-        meanfunc   = {@meanZero};
-        covfunc    = {@covSEiso};
-        likfunc    = @likGauss;
-        hyp        = struct('mean', [], 'cov', [0 0], 'lik', -1);
-        hyp_opt    = minimize(hyp, @gp, -100, @infLaplace, meanfunc, covfunc, likfunc, model.X_train, model.y_train);
-        
-        % Create Surrogate function \hat(f_Q) = E{p(f_Q|\xi)}
-        rbf_width = exp(hyp_opt.cov(1)); epsilon = 0.001;
-        surr_fQ    = @(x) my_gpr(x',[],model,epsilon,rbf_width);
-        
-        % Plot surrogate function
-        plot_lyap_fct(surr_fQ, 0, limits,'Surrogate $f_Q(\xi)$',1);        hold on;
-        h_samples_s = scatter(chi_samples_surr(1,:),chi_samples_surr(2,:),'+','c');
-        
-        %%%%% Implement Newton Method to find maxima in compact set (on Surrogate function!)  %%%%%
-        % Create gradient handle of surrogate function
-        grad_surr_fQ   = @(x)gradient_gpr(x, model, epsilon, rbf_width);        
-        
-        %%%%%%% Maxima Search Option A: Gradient Ascent
-        ga_options = [];
-        ga_options.gamma    = 0.001;  % step size (learning rate)
-        ga_options.max_iter = 1500;   % maximum number of iterations
-        ga_options.f_tol    = 1e-10;  % termination tolerance for F(x)
-        ga_options.plot     = 1;      % plot init/final and iterations
-        ga_options.verbose  = 0;      % Show values on iterations
-        
-        % Initial value
-        x0 = Mu;
-%         x0 = chi_samples_used(:,50+randsample(2*desired_samples,1));
-        fprintf('Finding maxima in Chi using Gradient Ascent...\n');        
-        [f_max, x_max, fvals, xvals, h_points] = gradientAscent(surr_fQ,grad_surr_fQ,x0, ga_options);   
-        real_fmax = f_Q(x_max);
-        fprintf('Maxima of surrogate function (hat(f)_max = %2.5f, f_max = %2.5f)found at x=%2.5f,y=%2.5f \n',f_max,real_fmax,x_max(1),x_max(2));                
-        if real_fmax > 0
-            fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', real_fmax);
-        else
-            fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n',real_fmax);
-        end
-
-        % Outer loop iteration
-        iter = iter + 1;
-    end
-% else
-%     tic;
-%     [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
-%     toc;
-% end
+    stability_ensured = 0; iter = 1;
+    %     while ~stability_ensured    
+    
+    % Outer loop iteration
+    iter = iter + 1;
+    % end
+else
+    tic;
+    [A_l, b_l, A_d, b_d] = optimize_localDS_for_LAGS(Data, A_g, att_g, fl_type, stability_vars);
+    toc;
+end
 
 Lambda_l = eig(A_l)
 kappa = max(abs(Lambda_l))/min(abs(Lambda_l))
-
 
 %% Testing newton method
 

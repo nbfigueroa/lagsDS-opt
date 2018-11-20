@@ -19,8 +19,7 @@ while iter < max_iter && ~converged
     iter = iter + 1;    
     
     % Gradient ascent
-    x = x + gamma * (grad_f(x));              
-    
+    x = x + gamma * (grad_f(x));                  
     
     % Check progress
     f_current = f(x);
@@ -31,7 +30,7 @@ while iter < max_iter && ~converged
     
     % Print Progress    
     if be_verbose
-        fprintf('iter= %d  ; f(x)=%2.8f; fdiff=%2.8f \n',iter, fvals(iter), fdiff);
+        fprintf('iter= %d  ; f(x)=%2.8f; fdiff=%2.8f \n',iter, f_current, fdiff);
     end
     
     % Keep values
@@ -43,10 +42,10 @@ toc;
 % Final values
 x_max = xvals(:,end);
 f_max = fvals(:,end);
-fprintf('Found Maxima of function (x=%2.3f, y=%2.3f) at iter=%d with value f=%2.2f \n',x_max(1), x_max(2), iter, f_max);
+fprintf('Found Maxima of function (x=%2.4f, y=%2.4f) at iter=%d with value f=%2.8f \n',x_max(1), x_max(2), iter, f_max);
 
 if do_plot
-    h_points = scatter(x_max(1),x_max(2),70,[1 1 1],'filled');
+    h_points = scatter(x_max(1),x_max(2),70,[1 0 0],'filled');
     h_points = [h_points scatter(x0(1),x0(2),40,[0 1 0],'filled')];
     h_points = [h_points plot(xvals(1,:),xvals(2,:),'-.','Color',[1 1 1],'LineWidth',2)];
 end

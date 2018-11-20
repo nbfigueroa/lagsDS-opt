@@ -12,13 +12,13 @@ grad_p_act = feval(grad_p_act_fun, x);  % Gradient of GPR or GMM or GAUSS
 % Gradient alpha as in Appendix C of lags-ds paper
 switch p_type
     case 'gpr'
-        grad_alpha = grad_r.*repmat(p_act,[D,1]) - repmat((1-r),[D 1]).*grad_p_act;
+        grad_alpha = grad_r.*repmat(p_act,[D,1]) + repmat((1-r),[D 1]).*grad_p_act;
     case 'gmm'
         Z = max(0,1 - p_act);
         grad_Z = 0.5 * (grad_p_act + repmat(sign(r),[D 1]).*grad_p_act);
         grad_alpha = repmat(1 - Z,[D,1]).* grad_r + repmat((1-r),[D 1]).*grad_Z;
     case 'gauss'
         p_act = p_act';
-        grad_alpha = grad_r.*repmat(p_act,[D,1]) - repmat((1-r),[D 1]).*grad_p_act;
+        grad_alpha = grad_r.*repmat(p_act,[D,1]) + repmat((1-r),[D 1]).*grad_p_act;
 end
 end
