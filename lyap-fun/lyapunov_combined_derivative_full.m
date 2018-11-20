@@ -25,11 +25,13 @@ end
 % Check if it's going against the grain
 if angle_n > pi/2 || angle_n < -pi/2
     h_set = 0;
-    corr_scale = 5;
+%     corr_scale = 5;
+    corr_scale = 0.25;
 else
     h_set = 1;
     corr_scale = 1;
 end
+
 
 % Output Variable
 lyap_der = zeros(1,M);
@@ -90,6 +92,7 @@ for i = 1:M
    
     % LMI format of Lyapunov Derivative
     lyap_der(1,i) = xi_aug'*Big_Q*xi_aug - (1-alpha(i))*lyap_der_mod_term;    
+%     lyap_der(1,i) = xi_aug'*Big_Q*xi_aug;    
 end
 
 end

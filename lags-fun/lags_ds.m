@@ -37,7 +37,8 @@ end
 % Check if it's going against the grain
 if angle_n > pi/2 || angle_n < -pi/2
     h_set = 0;
-    corr_scale = 5;
+%     corr_scale = 5;
+    corr_scale = 0.25;
 else
     h_set = 1;
     corr_scale = 1;
