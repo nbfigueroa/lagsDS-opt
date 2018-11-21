@@ -15,36 +15,34 @@ plot_lyap_fct(f,1,limits_,'$f_Q(\xi)$',1);        hold on;
 % Plot the gradient of the function
 eval_fun       = @(x)alpha_fun(x);
 plot_gradient_fct(grad_f, limits_,  '$f_Q$ and $\nabla_{\xi}f_Q$ Function');
-
+%% Test the maxima search function
+lm_options                   = [];
+lm_options.type              = 'grad_ascent';
+lm_options.num_ga_trials     = 10;
+lm_options.do_plots          = 0;
+lm_options.init_set          = chi_samples;
+lm_options.verbosity         = 0;
+[local_max, local_fmax]      =  find_localMaxima(f, grad_f, lm_options);
+if any(local_fmax >= 0)
+    fprintf (2, 'ALL fQ_max < 0 !!\n');
+else
+    fprintf ('+++++ ALL fQ_max < 0 +++++!!\n');
+end
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%      Optimization OPTION 1: Maxima Search using Gradient Ascent       %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ga_options = [];
 ga_options.gamma    = 0.0001;  % step size (learning rate)
-ga_options.max_iter = 10000;    % maximum number of iterations
-ga_options.f_tol    = 1e-10;   % termination tolerance for F(x)
+ga_options.max_iter = 1000;    % maximum number of iterations
+ga_options.f_tol    = 1e-8;   % termination tolerance for F(x)
 ga_options.plot     = 1;       % plot init/final and iterations
 ga_options.verbose  = 1;       % Show values on iterations
 
 % Set Initial value
-x0 = Mu;
-inner_sample = 0;
-while ~inner_sample    
-%     x0 = Xi_ref(:,randsample(length(Xi_ref),1));    
-    x0 = chi_samples_used(:,randsample(length(chi_samples_used),1));
-    x0 = att_l;
-    if lambda_fun(x0) < 0.5 && alpha_fun(x0) < 0.5
-        inner_sample = 1;
-    end
-end
+x0 = chi_samples(:,randsample(length(chi_samples),1));
 fprintf('Finding maxima in Test function using Gradient Ascent...\n');
-
-%% Plot the Lyapunov function to find minima
-% plot_lyap_fct(f_Q, 0, limits_,'Test $f(\xi)$',1);
-% x0 = att_l;
-x0 = chi_samples_used(:,randsample(length(chi_samples_used),1));
-[f_max, x_max, fvals, xvals, h_points] = gradientAscent(f_Q,grad_fQ, x0, ga_options);
+[f_max, x_max, fvals, xvals, h_points] = gradientAscent(f,grad_f, x0, ga_options);
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%      Optimization OPTION 2: Maxima Search using Newton Method         %%

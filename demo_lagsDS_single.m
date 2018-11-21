@@ -107,7 +107,6 @@ if exist('h_vel','var');  delete(h_vel); end
 % Create Hyper-Plane function
 w =  (Mu-att_l)/norm(Mu-att_l);
 h_fun = @(x)hyper_plane(x,w,att_l);
-% grad_h_fun = @(x)(repmat(w,[1 size(x,2)]));
 grad_h_fun = @(x)grad_hyper_plane(x,w,h_fun);
 
 % Gaussian Covariance scaling
@@ -220,17 +219,23 @@ else
     [A_g, b_g, ~] = optimize_linear_ds_from_data(Data, att_g, fg_type, 1, P_g, Mu, P_l, att_l, 'full');       
 end
 
-% Stability Checks
+% Stability Checks -- lambda_min < -1 for good estimation
 Q_g  = A_g'*P_g + P_g*A_g;
 lambda_Qg = eig(Q_g)
 Q_gl = A_g'*P_l';
 lambda_Qgl = eig(Q_gl)
 
-% -- Check that global DS is asymptotically stable
+% Check \dot(Vg)
+lyap_der_glob = @(x)lyapunov_combined_derivative_global(x, att_g, att_l, P_g, P_l, A_g);
+if exist('h_lyap_der_glob','var'); delete(h_lyap_der_glob); end
+h_lyap_der_glob = plot_lyap_fct(lyap_der_glob, 1, limits_,  'Lyapunov Derivative of Global DS', 1);
 
 % Local Attractor diffusive function component
-breadth_mod = 50;
+breadth_mod = 50; % larger number.. smaller the rbf width
 lambda_fun = @(x)lambda_mod_fun(x, breadth_mod, att_l, grad_h_fun, grad_lyap_fun);
+
+%%% TODO -> compute epsilon from maximum of this function in the compact set
+%%% within Brl
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Option 1: Unconstrained Local-Dynamics Estimation, given known \kappa %%
@@ -243,7 +248,7 @@ kappa = max(abs(Lambda_l))/min(abs(Lambda_l))
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Option 2: Un/Constrained Local-Dynamics Estimation, estimating \kappa %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%  LOCAL DS OPTIMIZATION OPTIONS %%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%  LOCAL DS OPTIMIZATION OPTIONS %%%%%%%%%%%%%%%%%%%%%
 % Construct variables and function handles for stability constraints
 clear stability_vars 
 stability_vars.solver          = 'fmincon'; % options: 'baron' or 'fmincon'
@@ -252,6 +257,7 @@ stability_vars.add_constr      = 1; % 0: no stability constraints
                                     % 1: Adding sampled stability constraints                                   
 % Type of constraint to evaluate
 stability_vars.constraint_type = 'matrix';  % options: 'full/matrix/hessian'
+stability_vars.epsilon         = 1e-2;      % small number for f_Q < -eps
 stability_vars.do_plots        = 1;         % plot current lyapunov constr. 
 stability_vars.init_samples    = 50;        % Initial num/boundary samples
 stability_vars.iter_samples    = 50;        % Initial num/boundary samples
@@ -269,23 +275,23 @@ else
     stability_vars.P_l           = P_l;
     stability_vars.P_g           = P_g;
 end
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if stability_vars.add_constr    
+if stability_vars.add_constr
     % Draw Initial set of samples for point-wise stability constraints
     desired_samples       = stability_vars.init_samples;
     desired_alpha_contour = 0.99;
     desired_Gauss_contour = -Norm*(desired_alpha_contour-1);
-    chi_samples = draw_chi_samples (Sigma,Mu,desired_samples, stability_vars.activ_fun, 'isocontours', desired_Gauss_contour);            
+    chi_samples = draw_chi_samples (Sigma,Mu,desired_samples, stability_vars.activ_fun, 'isocontours', desired_Gauss_contour);
     
     % Local DS Optimization with Constraint Rejection Sampling
-    stability_ensured = 0; iter = 1; test_grid = 0; 
+    stability_ensured = 0; iter = 1; test_grid = 0;
     while ~stability_ensured
         if iter == 1
             fprintf('First iteration, using %d BOUNDARY chi-samples..\n', size(chi_samples,2));
         else
             fprintf('iter = %d, using %d chi-samples..\n', iter, size(chi_samples,2));
-        end       
+        end
         pause(1);
         
         % Feed chi_samples to optimization structure
@@ -300,8 +306,8 @@ if stability_vars.add_constr
         end
         
         % Create function handles for current estimate of f_Q, grad_fQ
-        clear f_Q 
-        f_Q = @(x)fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);        
+        clear f_Q
+        f_Q = @(x)fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %%%%  Check for violations in compact set by grid-sampling  %%%%
@@ -319,17 +325,17 @@ if stability_vars.add_constr
             end
         end
         cv_options                   = [];
-        cv_options.type              = 'grid';
         cv_options.chi_params        = struct('Mu',Mu,'Sigma',Sigma);
         cv_options.num_samples       = 10^5;
+        cv_options.epsilon           = stability_vars.epsilon;
         tic;
         [constraint_violations_grid, max_fQ_grid, max_X_grid] = search_constraintViolations(f_Q, activ_fun, cv_options);
         toc;
         
         % If we still have violations sample new contraints-eval points
         new_samples = []; num_grid_violations = length(constraint_violations_grid);
-        if max_fQ_grid > 0
-            fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', max_fQ_grid);
+        if max_fQ_grid > -stability_vars.epsilon
+            fprintf(2, 'Maxima in compact set is positive (f_max=%2.8f)! Current form is Not Stable!\n', max_fQ_grid);
             if num_grid_violations <= stability_vars.iter_samples
                 new_samples = constraint_violations_grid;
             else
@@ -349,49 +355,47 @@ if stability_vars.add_constr
             end
             chi_samples = [chi_samples new_samples];
         else
-
-            fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n', max_fQ_grid);
+            
+            fprintf('Maxima in compact set is negative (f_max=%2.8f)! Stability is ensured!\n', max_fQ_grid);
             test_grid = 1;
             
             % Check via optimization if parameters are stable
             if test_grid
-                
                 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                 %%%% DOUBLE CHECK! Find maxima in compact set with Gradient Ascent on estimated fQ() %%%%
                 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                 % Gradient of Lyapunov Function
-                %     grad_fQ = @(x)gradient_fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, grad_alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
-                %     % Plot Current Lyapunov Constraints function fQ
-                %     if stability_vars.do_plots
-                %         plot_lyap_fct(f_Q, 1, limits_,'Test $f_Q(\xi)$ with Maxima Search (Optimization)',1); hold on;
-                %     end
-                %     cv_options                   = [];
-                %     cv_options.type              = 'grad_ascent';
-                %     cv_options.num_ga_trials     = 10;
-                %     cv_options.do_plots          = 1;
-                %     cv_options.init_set          = Xi_ref;
-                %     cv_options.grad_fQ           = grad_fQ;
-                %     tic;
-                %     [constraint_violations_grad, max_fQ_grad, max_x] = search_constraintViolations(f_Q, activ_fun, cv_options);
-                %     toc;
-                %
-                %     % If we still have violations sample new contraints-eval points
-                %     test_grad = 0;
-                %     if max_fQ_grad > 0
-                %         fprintf(2, 'Maxima in compact set is positive (f_max=%2.2f)! Current form is Not Stable!\n', max_fQ_grad);
-                %     else
-                %         fprintf('Maxima in compact set is negative(f_max=%2.2f)! Stability is ensured!\n', max_fQ_grad);
-                %         test_grad = 1;
-                %     end                
-                
-                stability_ensured = 1;
+                clear grad_fQ
+                grad_fQ = @(x)gradient_fQ_constraint_single(x, att_g, att_l, P_g, P_l, alpha_fun, grad_alpha_fun, h_fun, grad_h_fun, A_g, A_l, A_d);
+                % Plot Current Lyapunov Constraints function fQ
+                if stability_vars.do_plots
+                    plot_lyap_fct(f_Q, 1, limits, 'Estimated $f_Q(\xi)$',1); hold on;
+                    plot_gradient_fct(grad_fQ, limits,  'Estimated $f_Q$ with $\nabla_{\xi}f_Q$');
+                end
+                % Do the maxima search with gradient ascent
+                lm_options                = [];
+                lm_options.type           = 'grad_ascent';
+                lm_options.num_ga_trials  = 10;
+                lm_options.do_plots       = stability_vars.do_plots;
+                lm_options.init_set       = chi_samples;
+                lm_options.verbosity      = 0;
+                [local_max, local_fmax]   = find_localMaxima(f_Q, grad_fQ, lm_options);
+                [max_val, max_id]         = max(local_fmax);
+                if max_val > 0
+                    fprintf (2, 'There was an fQ_max(%2.8f) > 0 at x=%3.3f,y=%3.3f found :( !!\n', max_val, local_max(1,max_id),local_max(2,max_id));
+                    fprintf (2, 'You must re-run optimization, try increasing epsilon! \n');
+                else
+                    fprintf ('+++++ ALL fQ_max < 0 +++++!!\n');
+                    % Estimated parameters ensure stability as fQ_max < 0
+                    stability_ensured = 1;
+                end
                 fprintf('Optimization converged to a stable solution with %d chi_samples in %d iterations!\n', size(chi_samples,2),iter);
-            end                        
-        end        
+            end
+        end
         
         % Constraint Sampling Loop
         iter = iter + 1;
-    end    
+    end
     
 else
     tic;
@@ -450,6 +454,7 @@ switch lyap_type
 %         lyap_der = @(x)lyapunov_combined_derivative(x, att_g, att_l, ds_lags_single, lyap_type, P_g, P_l, beta_eps);        
         
         % Derivative of Lyapunov function (fully factorized)
+        clear  lyap_der
         lyap_der = @(x)lyapunov_combined_derivative_full(x, att_g, att_l, P_g, P_l, alpha_fun, h_fun, lambda_fun, grad_h_fun, A_g, A_l, A_d);
         title_string = {'$V(\xi) = (\xi-\xi_g^*)^TP_g(\xi-\xi_g^*) + \beta((\xi-\xi_g^*)^TP_l(\xi-\xi_l^*))^2$'};
 end

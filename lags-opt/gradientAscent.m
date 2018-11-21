@@ -26,11 +26,15 @@ while iter < max_iter && ~converged
     fdiff = fvals(iter-1) - f_current;
     if (abs(fdiff) < f_tol) || (fdiff == 0)
         converged = 1;
-    end
+    end        
     
     % Print Progress    
     if be_verbose
         fprintf('iter= %d  ; f(x)=%2.8f; fdiff=%2.8f \n',iter, f_current, fdiff);
+    end
+    
+    if (abs(fdiff) > f_tol) && (iter == max_iter - 1)
+        max_iter = max_iter + 0.5*max_iter;
     end
     
     % Keep values
@@ -48,6 +52,8 @@ if do_plot
     h_points = scatter(x_max(1),x_max(2),70,[1 0 0],'filled');
     h_points = [h_points scatter(x0(1),x0(2),40,[0 1 0],'filled')];
     h_points = [h_points plot(xvals(1,:),xvals(2,:),'-.','Color',[1 1 1],'LineWidth',2)];
+else
+    h_points = [];
 end
 
 end

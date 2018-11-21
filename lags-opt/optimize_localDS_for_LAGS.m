@@ -8,6 +8,7 @@ Xi_ref_dot = Data(3:4,:);
 
 %%%%%%%%%%%%%% Parse Optimization Options %%%%%%%%%%%%%%
 solver_type     = stability_vars.solver;
+epsilon         = stability_vars.epsilon;
 
 %%%%%%%%%%%%%% Initialize optimization problem with Yalmip %%%%%%%%%%%%%%
 sdp_options = [];
@@ -141,8 +142,8 @@ if ds_type ~= 3
                 case 'full' % Lyapunov Constraint using gradient of lyapnuv function
                     
                     % Compute lyapunov constraint on Chi samples
-                    Constraints = [Constraints alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) < ...
-                        -(1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l))];
+                    Constraints = [Constraints ( alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) + ...
+                        (1-alpha(j))*grad_lyap(:,j)' * ((A_L) * (chi_samples(:,j) - att_l))) < -epsilon];
                     
                     %%%%%%%%%%%% FOR DEBUGGING %%%%%%%%%%%%                    
                     chi_lyap_constr = alpha(j)*grad_lyap(:,j)' * A_g * (chi_samples(:,j) - att_g) + ...
@@ -174,9 +175,12 @@ if ds_type ~= 3
                     Q_LGL = Q_LG + Q_GL;
                                         
                     % Compute lyapunov constraint on Chi samples
-                    Constraints = [Constraints (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) < ...
-                        -( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
-                           (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l))];
+%                     Constraints = [Constraints (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) < ...
+%                         -( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
+%                            (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l))];
+                     Constraints = [Constraints ( (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
+                         + ( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
+                           (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l)) ) < -epsilon];   
                        
                     %%%%%%%%%%%% FOR DEBUGGING %%%%%%%%%%%%
                     chi_lyap_constr = (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
