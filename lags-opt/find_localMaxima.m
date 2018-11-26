@@ -14,7 +14,7 @@ switch type
         ga_options = [];
         ga_options.gamma    = 0.0001;                % step size (learning rate)
         ga_options.max_iter = 1000;                  % maximum number of iterations
-        ga_options.f_tol    = 1e-8;                  % termination tolerance for F(x)
+        ga_options.f_tol    = 1e-8;                 % termination tolerance for F(x)
         ga_options.plot     = lm_options.do_plots;   % plot init/final and iterations        
         ga_options.verbose  = verbosity;             % Show values on iterations
                       

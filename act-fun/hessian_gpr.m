@@ -21,7 +21,7 @@ beta  = L'\(L\y_train');
 % Variables for gradient
 Lambda   = 1/rbf_var * eye(D,D);
 I_train  = ones(1,M_train);
-hess_gpr = zeros(D,D,M_test);
+hess_gpr        = zeros(D,D,M_test);
 for ii=1:M_test
     X_tilde_test = bsxfun(@plus, -X_train, x(:,ii));  
     
@@ -29,15 +29,13 @@ for ii=1:M_test
     inner_first_term  = I_train*(K(M_train+ii,i)'.* beta);
     
     % Computing second 'inner' term
-    kernel_der_train = X_tilde_test.*K(M_train+ii,i);
-    for jj=1:M_train
-        kernel_der_train(:,jj) = -(Lambda^-1)*kernel_der_train(:,jj);
-    end    
-    inner_second_term = X_tilde_test * (kernel_der_train'.* beta);
+    grad_gpr_test = -(Lambda^-1) * X_tilde_test * (K(M_train+ii,i)');
+    inner_second_term = X_tilde_test * (grad_gpr_test'.* beta);
     
     % Final hessian for test point
-    hess_gpr(:,:,ii) = -(Lambda^-1)*(inner_first_term + inner_second_term);
+    hess_gpr(:,:,ii) = (Lambda^-1)*(inner_first_term - inner_second_term);
 end
 
+% not 100% sure this is the actual equation
 
 end

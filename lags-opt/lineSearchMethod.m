@@ -1,4 +1,4 @@
-function [f_max, x_max, fvals, xvals, h_points] = newtonMethod(f,grad_f,hess_f, x0, options)
+function [f_max, x_max, fvals, xvals, h_points] = lineSearchMethod(f,grad_f, x0, options)
 
 % Parse options
 max_iter   = options.max_iter; % maximum number of iterations
@@ -12,31 +12,57 @@ x = x0;
 fvals = []; xvals = [];
 xvals (:,iter) = x;
 fvals (iter)   = f(x);
+g_k = grad_f(x);
+d_k = -g_k;
 converged = 0;
-epsilon = 1e-2;
 tic;
+% Print Progress
+if be_verbose
+    fprintf('iter= %d  ; f(x)=%2.8f; \n',iter, fvals (iter));
+end
 while iter < max_iter && ~converged    
     iter = iter + 1;
-    % Compute Hessian of current point
-    H_f = hess_f(x);
-    g_f = grad_f(x);
-       
-    % Eigendecomposition of Hessian
-    [V, L] =  eig(H_f);   
-    l_vec  = diag(L);
-    if any(l_vec > 0)
-        warning('Saddle point!!');
-    end
-
-    % Newton Iteration
-    x = x - (H_f\g_f);                      
     
+    % Reset
+    if norm(grad_f(x)) == 0
+        warning('resetting!!')
+        g_k = grad_f(x);
+        d_k = -g_k;
+    end
+    
+    % Compute alpha of current iteration
+    alpha_k = searchAlpha(x,f,d_k);
+
+    if isnan(alpha_k)
+        break;
+    end
+    
+    % Conjugate Gradient Iteration
+    x = x - alpha_k * d_k;                      
+
+    % Compute next values
+    g_k_old = g_k;
+    g_k     = grad_f(x)
+    
+    % Fletcher-Reeves
+%     beta_k  = (g_k'*g_k)/(g_k_old'*g_k_old)
+    % Polak-Ribiere
+    beta_k  = ((g_k-g_k_old)'*g_k)/(g_k_old'*g_k_old)
+    
+    
+    d_k     = -g_k + beta_k*d_k;
+            
     % Check progress
     f_current = f(x);
     fdiff = fvals(iter-1) - f_current;
+    % Stop if the f-difference is below a thresghold
     if (abs(fdiff) < f_tol) || (fdiff == 0)
         converged = 1;
     end
+    % Stop if the x-difference is below a thresghold
+    if (norm(x-xvals (:,iter-1)) < f_tol)
+        converged = 1;
+    end    
     
     % Print Progress    
     if be_verbose
@@ -62,4 +88,8 @@ else
     h_points = [];
 end
 
+end
+
+function [alpha_k] = searchAlpha(x,f,d_k)
+alpha_k = 0.0001;
 end

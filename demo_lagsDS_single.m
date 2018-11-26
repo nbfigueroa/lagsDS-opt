@@ -135,6 +135,7 @@ end
 
 % Compute gradients
 grad_radius_fun = @(x)grad_lambda_fun(x, c_rad, att_g);
+hess_radius_fun = @(x) hess_lambda_fun(x, c_rad, att_g);
 gauss_fun       = @(x)my_gaussPDF(x, Mu, Sigma);
 grad_gauss_fun  = @(x)grad_gauss_pdf(x, Mu, Sigma);
 grad_alpha_fun  = @(x)((1/Norm).*gradient_alpha_fun(x,radius_fun, grad_radius_fun, gauss_fun, grad_gauss_fun, 'gauss'));
