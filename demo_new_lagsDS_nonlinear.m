@@ -27,7 +27,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Demo Code for Locally Active Globally Stable DS with multiple local regions %%
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  DATA LOADING OPTION 1: Draw with GUI %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 close all; clear all; clc
 %%%%%%% Choose to plot robot for simulation %%%%%%%
 with_robot = 1;
@@ -58,7 +60,6 @@ end
 % Global Attractor of DS
 att_g = [0 0]';
 scatter(att_g(1),att_g(2),100,[0 0 0],'d'); hold on;
-
 
 % Draw Reference Trajectory
 data = draw_mouse_data_on_DS(fig1, limits);
