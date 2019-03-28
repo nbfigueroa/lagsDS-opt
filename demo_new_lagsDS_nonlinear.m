@@ -1,8 +1,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Demo Script for GMM-based LPV-DS Learning introduced in paper:          %
+% Demo Script for GMM-based LAGS-DS Learning introduced in paper:         %
 %  'Locally Active Globally Stable Dynamical Systems';                    %
-% N. Figueroa and A. Billard; TRO/IJRR 2019    %
-% With this script you can load 2D toy trajectories and real-world    %
+% N. Figueroa and A. Billard; TRO/IJRR 2019                               %
+% With this script you can load 2D toy trajectories and real-world        %
 % trajectories acquired via kinesthetic taching and test the different    %                   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

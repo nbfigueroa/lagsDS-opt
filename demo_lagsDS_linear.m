@@ -1,3 +1,28 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Demo Script for GMM-based LAGS-DS Learning introduced in paper:         %
+%  'Locally Active Globally Stable Dynamical Systems';                    %
+% N. Figueroa and A. Billard; TRO/IJRR 2019                               %
+% With this script you can draw simple linear trajectories and learn      %
+% a corresponding linear LAGS-DS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (C) 2019 Learning Algorithms and Systems Laboratory,          %
+% EPFL, Switzerland                                                       %
+% Author:  Nadia Figueroa                                                 % 
+% email:   nadia.figueroafernandez@epfl.ch                                %
+% website: http://lasa.epfl.ch                                            %
+%                                                                         %
+% This work was supported by the EU project Cogimon H2020-ICT-23-2014.    %
+%                                                                         %
+% Permission is granted to copy, distribute, and/or modify this program   %
+% under the terms of the GNU General Public License, version 2 or any     %
+% later version published by the Free Software Foundation.                %
+%                                                                         %
+% This program is distributed in the hope that it will be useful, but     %
+% WITHOUT ANY WARRANTY; without even the implied warranty of              %
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General%
+% Public License for more details                                         %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Demo Code for Locally Active Globally Stable DS with 1 local region %%
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -54,23 +79,13 @@ est_options.maxK             = 15;  % Maximum Gaussians for Type 1
 est_options.fixed_K          = 1;  % Fix K and estimate with EM for Type 1
 
 % If algo 0 or 2 selected:
-est_options.samplerIter      = 100;  % Maximum Sampler Iterations
-                                    % For type 0: 20-50 iter is sufficient
-                                    % For type 2: >100 iter are needed
-                                    
+est_options.samplerIter      = 100;  % Maximum Sampler Iterations                                   
 est_options.do_plots         = 0;   % Plot Estimation Statistics
 est_options.sub_sample       = 2;   % Size of sub-sampling of trajectories
-                                    % 1/2 for 2D datasets, >2/3 for real    
 % Metric Hyper-parameters
 est_options.estimate_l       = 1;   % '0/1' Estimate the lengthscale, if set to 1
 est_options.l_sensitivity    = 0.5;   % lengthscale sensitivity [1-10->>100]
-                                    % Default value is set to '2' as in the
-                                    % paper, for very messy, close to
-                                    % self-intersecting trajectories, we
-                                    % recommend a higher value
-est_options.length_scale     = [];  % if estimate_l=0 you can define your own
-                                    % l, when setting l=0 only
-                                    % directionality is taken into account
+est_options.length_scale     = [];  
 
 % Fit GMM to Trajectory Data
 [Priors, Mu, Sigma] = fit_gmm(Xi_ref, Xi_dot_ref, est_options);
