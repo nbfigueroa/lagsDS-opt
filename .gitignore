@@ -3,3 +3,6 @@ build/
 *~*
 doc/
 thirdparty/lightspeed/*
+thirdparty/mosek/*
+thirdparty/matbar/*
+thirdparty/baron-lin64/*
