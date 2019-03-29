@@ -336,7 +336,7 @@ switch Ag_type
         end        
 end
 
-% -- TODO: This can be done inside the estmation function
+%% -- TODO: This can be done inside the estmation function
 % Check full constraints along reference trajectory
 x_test = Xi_ref;
 full_constr_viol = zeros(1,size(x_test,2));
@@ -433,7 +433,7 @@ end
 
 %% Simulate Passive DS Controller function
 struct_stiff = [];
-struct_stiff.DS_type             = 'lags'; % Options: SEDS, Global-LPV, LAGS, LMDS ?
+struct_stiff.DS_type             = 'lags'; % Options: SEDS, Global-LPV, LAGS
 struct_stiff.gmm                 = ds_gmm;
 struct_stiff.A_g                 = A_g;
 struct_stiff.A_l                 = A_l;

@@ -4,16 +4,6 @@ function [] = simulate_passiveDS(hfig, robot, base, ds, target, dt, varargin)
 % figure(hfig);
 hold on
 
-% set(hfig,'WindowButtonDownFcn',@(h,e)button_clicked(h,e));
-% set(hfig,'WindowButtonUpFcn',[]);
-% set(hfig,'WindowButtonMotionFcn',[]);
-% hp = gobjects(0);
-
-% Stop recording
-% restart_btn = uicontrol('Position',[100 20 110 25],'String','restart',...
-%               'Callback','uiresume(gcbf)');   
-          
-% while true
  
     % Setting robot to starting point
     disp('Select a starting point for the simulation...')
@@ -23,8 +13,7 @@ hold on
     while infeasible_point
         try
             xs = get_point(hfig) - base;
-            % Another option (Start around demonstrations) :
-            % xs  =  Data(1:2,1) - base + 0.15*randn(1,2)'
+
             qs = simple_robot_ikin(robot, xs);
             robot.animate(qs);
             infeasible_point = 0;
@@ -40,22 +29,6 @@ hold on
         struct_stiff = varargin{1};
         [hd, hx] = simulation_passive_control_cont(hfig, robot, base, ds, target, qs, dt, struct_stiff);
     end    
-
-%     % Press Enter to start another simulation
-%     clc;
-%     fprintf('Press button to restart simulation.\n');
-%     try
-%         uiwait(gcf);
-%         
-%         % Remove Old Simulation if it exists
-%         if exist('hd','var'), delete(hd); end
-%         if exist('hx','var'), delete(hx); end
-%         fprintf('Starting new simulation.\n')
-%     catch
-%         fprintf('figure closed.\n')
-%         break;
-%     end
-% end
 fprintf('Simulation ended.\n')
 
 end

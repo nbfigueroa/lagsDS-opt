@@ -99,7 +99,7 @@ while(1)
                     end
             end
             Jacobian_DS_sym = sum(Jacobian_DS,3);
-            eig(Jacobian_DS_sym)
+%             eig(Jacobian_DS_sym)
             
             % Apparent Stiffness projected on the defined Basis
             switch basis_type

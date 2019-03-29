@@ -11,7 +11,8 @@ maxPert = [0;0];
 
 % Variable for Plotting Damping Matrix
 i = 1;
-mod_step = 10;
+mod_step = 20;
+L = [1 0;0 1];
 color = [ 0.6 0.4 0.6; 1 0.4 0.6];
 ell_scaling = 0.05;
 
@@ -22,6 +23,9 @@ if nargin == 8
     K = length(gmm.Priors);
     basis_type = struct_stiff.basis;
     DS_type = struct_stiff.DS_type;
+    mod_step = struct_stiff.mod_step;
+    L        = struct_stiff.L;
+        
     if strcmp(DS_type,'lags')        
         A_l =      struct_stiff.A_l;
         A_d = struct_stiff.A_d  ;
@@ -47,7 +51,6 @@ while(1)
     xd = xd(1:2) ;  
     
     %reference_vel(t);
-%     xd_ref = reshaped_ds(x-target);
     xd_ref = reshaped_ds(x);
     
     % put lower bound on speed, just to speed up simulation
@@ -58,26 +61,28 @@ while(1)
     xdd_ref = -(xd - xd_ref)/dt*0.5;
     
     % Compute Damping Matrix
-    Q = findDampingBasis(xd_ref);
-    L = [1 0;0 2];
-    %L = [1 0;0 1];
-    %L = [1 0;0 4];
+    Q = findDampingBasis(xd_ref);    
     D = Q*L*Q';
     
+       
     % Plot Damping/Stiffness Matrix    
-    if (i == 1) || (mod(i,mod_step) == 0)
-        if exist('hd','var'), delete(hd); end
-        if exist('hk','var'), delete(hk); end
-        if exist('ht','var'), delete(ht); end
-        if nargin == 8
+    if nargin == 8
+        if (i == 1) || (mod(i,mod_step) == 0)        
+            
+            if exist('hd','var'), delete(hd); end
+            if exist('hk','var'), delete(hk); end
+            if exist('ht','var'), delete(ht); end
+            
             D_scaled = Q*(ell_scaling*real(L) + eps)*Q';
             hd =   ml_plot_gmm_contour(gca,1,x,D_scaled,color(1,:),1);
             Jacobian_DS = zeros(2,2,K);
             
             switch DS_type
                 case 'global'
+                    gamma_x = posterior_probs_gmm(x,gmm,'norm');
                     for k=1:K
-                        gamma_k_x    = gamma_prob_fun(x, gmm, k);
+                        gamma_k_x = gamma_x(k, :);
+                        % This function could be sped up
                         gamma_k_grad = gamma_prob_grad_fun(x, gmm, k);
                         Jacobian_DS(:,:,k) = (gamma_k_grad*x' + gamma_k_x*eye(2,2))*A_g(:,:,k)';
                     end
@@ -104,8 +109,8 @@ while(1)
                     end
             end
             Jacobian_DS_sym = sum(Jacobian_DS,3);
-            [J_v, J_l] = eig(Jacobian_DS_sym);
-            %Jacobian_DS_sym = J_v * (-abs(J_l)) * J_v';
+%             [J_v, J_l] = eig(Jacobian_DS_sym);
+%             Jacobian_DS_sym = J_v * (-abs(J_l)) * J_v';
             
             % Apparent Stiffness projected on the defined Basis
             switch basis_type
@@ -120,8 +125,8 @@ while(1)
             K_stiff_eig = abs([K_stiff_1 0; 0 K_stiff_2]);
             K_scaled = E *(ell_scaling*K_stiff_eig + eps)*E';
             hk = ml_plot_gmm_contour(gca,1,x,K_scaled,color(2,:),1);
-            ht =  plot(x(1), x(2), 'm+', 'markersize', 30);
-        end   
+            ht =  plot(x(1), x(2), 'm+', 'markersize', 30);                       
+        end 
     end
     
     % Compute Cartesian Control    

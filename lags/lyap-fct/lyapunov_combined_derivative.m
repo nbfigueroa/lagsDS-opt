@@ -14,6 +14,7 @@ if K == 1
                 grad_local_comp_g = 2*(x(:,i) - att_g)'*(x(:,i) - att_l)*(x(:,i) - att_l);
                 grad_local_comp_l = 2*(x(:,i) - att_l)'*(x(:,i)-att_g)*(x(:,i) - att_g);
                 lyap_local =   (x(:,i) - att_g)'*(x(:,i) - att_l);
+                
             case 1
                 P_global = varargin{1};
                 P_local  = varargin{2};
