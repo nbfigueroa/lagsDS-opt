@@ -1,10 +1,39 @@
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Demo Code for Locally Active Globally Stable DS with multiple local regions %%
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%  DATA LOADING OPTION 1: Draw with GUI %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Demo Script for GMM-based LAGS-DS Learning introduced in paper:         %
+%  'Locally Active Globally Stable Dynamical Systems';                    %
+% N. Figueroa and A. Billard; TRO/IJRR 2019                               %
+% With this script you can load/draw 2D toy trajectories and real-world   %
+% trajectories acquired via kinesthetic taching and test the different    %                   %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (C) 2019 Learning Algorithms and Systems Laboratory,          %
+% EPFL, Switzerland                                                       %
+% Author:  Nadia Figueroa                                                 % 
+% email:   nadia.figueroafernandez@epfl.ch                                %
+% website: http://lasa.epfl.ch                                            %
+%                                                                         %
+% This work was supported by the EU project Cogimon H2020-ICT-23-2014.    %
+%                                                                         %
+% Permission is granted to copy, distribute, and/or modify this program   %
+% under the terms of the GNU General Public License, version 2 or any     %
+% later version published by the Free Software Foundation.                %
+%                                                                         %
+% This program is distributed in the hope that it will be useful, but     %
+% WITHOUT ANY WARRANTY; without even the implied warranty of              %
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General%
+% Public License for more details                                         %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Demo Code for Non-linear LAGS-DS with multiple local regions %%
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%  Step 1 [OPTION 1]: Load 2D Data Drawn from GUI %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 close all; clear all; clc
 %%%%%%% Choose to plot robot for simulation %%%%%%%
-with_robot = 1;
+with_robot   = 1;
+continuous   = 1;
+
 if with_robot
     % set up a simple robot and a figure that plots it
     robot = create_simple_robot();
@@ -13,173 +42,198 @@ if with_robot
     % Base Offset
     base = [-1 1]';
     % Axis limits
-%     limits = [-2.5 0.5 -0.45 2.2];
-%     limits = [-2.5 0.5 -0.45 1.5];
     limits = [-2.5 0.5 -0.45 2.2];
 else
     fig1 = figure('Color',[1 1 1]);
     % Axis limits
-%     limits = [-3.5 0.5 -0.5 2];
-%     limits = [-2.5 0.5 -0.45 1.5];
-%     limits = [-0.5 2.5 -1.5 0.45];
-%     limits = [-6 4 -2 2];
     limits = [-2.5 0.5 -0.45 2.2];
     axis(limits)    
     set(gcf, 'Units', 'Normalized', 'OuterPosition', [0.25, 0.55, 0.2646 0.4358]);
     grid on
 end
 
-% Global Attractor of DS
-att_g = [0 0]';
-scatter(att_g(1),att_g(2),100,[0 0 0],'d'); hold on;
-
-
 % Draw Reference Trajectory
 data = draw_mouse_data_on_DS(fig1, limits);
-% Choose Activation Function type
-B_r = 10;
-radius_fun = @(x)(1 - my_exp_loc_act(B_r, att_g, x));
-grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
-
-Data = [];
-for l=1:length(data)    
-    % Check where demos end and shift
-    data_ = data{l};
-    if radius_fun(data_(1:2,end)) > 0.75
-        data_(1:2,:) = data_(1:2,:) - repmat(data_(1:2,end), [1 length(data_)]);
-        data_(3:4,end) = zeros(2,1);
-    end    
-    Data = [Data data_];
+if continuous
+    % Process Drawn Data for DS learning
+    [Data, Data_sh, att_g, x0_all, dt] = processDrawnData(data);
+else
+    % Process dis-joint data another way...    
+    att_g = [0;0];    
 end
+h_att = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
 
 % Position/Velocity Trajectories
+M          = length(Data);
 Xi_ref     = Data(1:2,:);
 Xi_dot_ref = Data(3:end,:);
+N = 2;
 
-%%  DATA LOADING OPTION 2: From LASA DATASET
-% Global Attractor of DS
-att_g = [0 0]';
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%  Step 1 [OPTION 2]: Load 2D Data Drawn from Datasets %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+clear all; clc; close all;
+pkg_dir = '/home/nbfigueroa/Dropbox/PhD_papers/LAGS-paper/new-code/lagsDS-opt/';
+%%%%%%%%%%%%%%%%%%% Choose a Dataset %%%%%%%%%%%%%%%%%%%%%                     
+choosen_dataset = 3; % 1: Demos from Gazebo Simulations (right trajectories)
+                     % 2: Demos from Gazebo Simulations (left+right trajectories)
+                     % 3: Demos from Real iCub 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+sub_sample      = 5; % To sub-sample trajectories   
+[Data, ~, att_g, x0_all, dt, data, ~, ...
+    ~, ~, dataset_name, box_size] = load_loco_datasets(pkg_dir, choosen_dataset, sub_sample);
 
-% Choose Activation Function type
-B_r = 10;
-radius_fun = @(x)(1 - my_exp_loc_act(B_r, att_g, x));
-grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
-
-% Choose DS LASA Dataset to load
-[demos, limits] = demo_load_LASA_dataset();
-
-sample = 1;
-Data = [];
-for l=1:2   
-    % Check where demos end and shift    
-    data_pos_raw = demos{l}.pos(:,1:sample:end); 
-    data_filt    = sgolay_time_derivatives(data_pos_raw', demos{l}.dt, 2, 3, 15);
-    data_ = [data_filt(:,:,1), data_filt(:,:,2)]';
-    if radius_fun(data_(1:2,end)) > 0.75
-        data_(1:2,:) = data_(1:2,:) - repmat(data_(1:2,end), [1 length(data_)]);
-        data_(3:4,end) = zeros(2,1);
-    end    
-    Data = [Data data_];
-    clear data_
+%%%%% Plot Position/Velocity Trajectories %%%%%
+vel_samples = 20; vel_size = 0.5; 
+[h_data, h_att, h_vel] = plot_reference_trajectories_DS(Data, att_g, vel_samples, vel_size);
+axis equal;
+limits = axis;
+h_att = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
+switch choosen_dataset
+    case 1
+        %%%%% Draw Obstacle %%%%%
+        rectangle('Position',[-1 1 6 1], 'FaceColor',[.85 .85 .85 0.5]); hold on;
+    case 2
+        %%%%% Draw Obstacle %%%%%
+        rectangle('Position',[-1 1 6 1], 'FaceColor',[.85 .85 .85 0.5]); hold on;
+    case 3
+        %%%%% Draw Table %%%%%
+        rectangle('Position',[-6.75 -2.15 0.5 0.5], 'FaceColor',[.85 .85 .85 0.5]); hold on;
 end
+title_name = strcat('Reference Trajectories from:', dataset_name);
+title(title_name,'Interpreter','LaTex','FontSize',16);
 
 % Position/Velocity Trajectories
+[~,M]      = size(Data);
 Xi_ref     = Data(1:2,:);
 Xi_dot_ref = Data(3:end,:);
+N = 2;
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% %%%%%% Step 1a: Discover Local Models with Selected GMM Estimation type %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%%%% GMM Estimation Algorithm %%%%
-% 0: Physically-Consistent Non-Parametric
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%  Step 2 (Locally Linear State-Space Paritioning): Fit GMM to Trajectory Data  %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%% GMM Estimation Algorithm %%%%%%%%%%%%%%%%%%%%%%
+% 0: Physically-Consistent Non-Parametric (Collapsed Gibbs Sampler)
 % 1: GMM-EM Model Selection via BIC
-% 2: GMM via Competitive-EM
+% 2: CRP-GMM (Collapsed Gibbs Sampler)
 est_options = [];
-est_options.type       = 0;   % GMM Estimation Alorithm Type    
-est_options.maxK       = 10;  % Maximum Gaussians for Type 1/2
-est_options.do_plots   = 1;   % Plot Estimation Statistics
-est_options.adjusts_C   = 1;   % Adjust Sigmas
-est_options.fixed_K     = [];  % Fix K and estimate with EM
-est_options.exp_scaling = 1;   % Scaling for the similarity to improve locality
+est_options.type             = 0;   % GMM Estimation Alorithm Type   
 
-% Discover Local Models
-sample = 2;
-[Priors0, Mu0, Sigma0] = discover_local_models(Xi_ref(:,1:sample:end), Xi_dot_ref(:,1:sample:end), est_options);
+% If algo 1 selected:
+est_options.maxK             = 10;  % Maximum Gaussians for Type 1
+est_options.fixed_K          = [];  % Fix K and estimate with EM for Type 1
 
-%% Extract Cluster Labels
-est_K      = length(Priors0); 
-Priors = Priors0; Mu = Mu0; Sigma = Sigma0;
-[~, est_labels] =  my_gmm_cluster(Xi_ref, Priors, Mu, Sigma, 'hard', []);
+% If algo 0 or 2 selected:
+est_options.samplerIter      = 50;  % Maximum Sampler Iterations
+                                    % For type 0: 20-50 iter is sufficient
+                                    % For type 2: >100 iter are needed
+                                    
+est_options.do_plots         = 1;   % Plot Estimation Statistics
+est_options.sub_sample       = 2;   % Size of sub-sampling of trajectories
+                                    % 1/2 for 2D datasets, >2/3 for real    
+% Metric Hyper-parameters
+est_options.estimate_l       = 1;   % '0/1' Estimate the lengthscale, if set to 1
+est_options.l_sensitivity    = 10;   % lengthscale sensitivity [1-10->>100]
+                                    % Default value is set to '2' as in the
+                                    % paper, for very messy, close to
+                                    % self-intersecting trajectories, we
+                                    % recommend a higher value
+est_options.length_scale     = [];  % if estimate_l=0 you can define your own
+                                    % l, when setting l=0 only
+                                    % directionality is taken into account
 
-% Visualize Cluster Parameters on Manifold Data
-plotGMMParameters( Xi_ref, est_labels, Mu, Sigma);
-limits_ = limits + [-0.015 0.015 -0.015 0.015];
-axis(limits_)
-switch est_options.type   
-    case 0
-        title('Physically-Consistent Non-Parametric Mixture Model','Interpreter','LaTex', 'FontSize',15);
-    case 1        
-        title('Best fit GMM with EM-based BIC Model Selection','Interpreter','LaTex', 'FontSize',15);
-    case 3
-        title('Bayesian Non-Parametric Mixture Model','Interpreter','LaTex', 'FontSize',15);
+% Fit GMM to Trajectory Data
+[Priors, Mu, Sigma] = fit_gmm(Xi_ref, Xi_dot_ref, est_options);
+K = length(Priors);
+
+%% Generate GMM data structure for DS learning
+clear ds_gmm; ds_gmm.Mu = Mu; ds_gmm.Sigma = Sigma; ds_gmm.Priors = Priors; 
+
+%% (Recommended!) Step 2.1: Dilate the Covariance matrices that are too thin
+% This is recommended to get smoother streamlines/global dynamics
+adjusts_C  = 1;
+if adjusts_C  == 1 
+    if N == 2
+        tot_dilation_factor = 1; rel_dilation_fact = 0.15;
+    elseif N == 3
+        tot_dilation_factor = 1; rel_dilation_fact = 0.75;        
+    end
+    Sigma_ = adjust_Covariances(ds_gmm.Priors, ds_gmm.Sigma, tot_dilation_factor, rel_dilation_fact);
+    ds_gmm.Sigma = Sigma_;
+end   
+
+%%  Visualize Gaussian Components and labels on clustered trajectories 
+% Extract Cluster Labels
+[~, est_labels] =  my_gmm_cluster(Xi_ref, ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma, 'hard', []);
+
+% Visualize Estimated Parameters
+[h_gmm]  = visualizeEstimatedGMM(Xi_ref,  ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma, est_labels, est_options);
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%    Step 3: Estimate Local directions/attractors and Hyper-Plane Functions  %%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%  Create Radial-Basis Function around global attractor %%%%
+B_r = 10;
+radius_fun = @(x)(1 - my_exp_loc_act(B_r, att_g, x));
+grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
+
+%%%%    Extract local linear DS directions and attractors   %%%%
+gauss_thres = 0.25; plot_local_params = 1;
+[att_l, local_basis] = estimate_local_attractors_lags(Data, est_labels, ds_gmm, gauss_thres, radius_fun, att_g);
+if plot_local_params
+    [h_att_l, h_dirs] = plotLocalParams(att_l, local_basis, Mu);
 end
 
-%%% Visualize GMM pdf from learnt parameters (for 1D Datasets)
-ml_plot_gmm_pdf(Xi_ref, Priors, Mu, Sigma, limits)
-clear ds_gmm; ds_gmm.Mu = Mu; ds_gmm.Sigma = Sigma; 
-ds_gmm.Priors = Priors; 
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%  Step 4: ESTIMATE CANDIDATE LYAPUNOV FUNCTION PARAMETERS  %%%%%%%%%
+%%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+[Vxf]    = learn_wsaqf(Data, att_l);
+P_g      = Vxf.P(:,:,1);
+P_l      = Vxf.P(:,:,2:end);
 
-% Adjust Covariance Matrices
-est_options.adjusts_C  = 1;
-if est_options.adjusts_C  == 1
-    tot_scale_fact = 1; rel_scale_fact = 0.15;
-    Sigma = adjust_Covariances(Sigma0, tot_scale_fact, rel_scale_fact);
-    ds_gmm.Sigma = Sigma;
-    % Visualize Cluster Parameters on Manifold Data
-    plotGMMParameters( Xi_ref, est_labels, Mu, Sigma);
-    limits_ = limits + [-0.015 0.015 -0.015 0.015];
-    axis(limits_)
-    switch est_options.type   
-    case 0
-        title('Physically-Consistent Non-Parametric Mixture Model','Interpreter','LaTex', 'FontSize',15);
-    case 1        
-        title('Best fit GMM with EM-based BIC Model Selection','Interpreter','LaTex', 'FontSize',15);
-    case 3
-        title('Bayesian Non-Parametric Mixture Model','Interpreter','LaTex', 'FontSize',15);
-    end   
+%%% If any local attractor is equivalent to the global re-parametrize %%%
+att_diff = att_l-repmat(att_g,[1 K]);
+equal_g = find(any(att_diff)==0);
+if equal_g ~= 0
+    id_l = find(equal_g>0);
+    for ii=1:length(id_l)
+        P_g = P_g + P_l(:,:,id_l(ii));
+        P_l(:,:,id_l(ii)) = P_g;
+    end
+end
+
+%%% Plot learned Lyapunov Function %%%
+if N == 2
+    contour = 1; % 0: surf, 1: contour
+    clear lyap_fun_comb 
     
-    ml_plot_gmm_pdf(Xi_ref, Priors, Mu, Sigma, limits)  
+    % Lyapunov function
+    lyap_fun_comb = @(x)lyapunov_function_combined(x, att_g, att_l, 1, P_g, P_l, ds_gmm);
+    title_string = {'$V_{DD-WSAQF}(\xi) = (\xi-\xi_g^*)^TP_g(\xi-\xi_g^*) + \sum_{k=1}^K\beta^k((\xi-\xi_g^*)^TP_l^k(\xi-\xi_k^*))^2$'};
+    if exist('h_lyap','var');  delete(h_lyap);     end
+    if exist('hd','var');     delete(hd);     end
+    [h_lyap] = plot_lyap_fct(lyap_fun_comb, contour, limits,  title_string, 0);
+    [hd] = scatter(Data(1,:),Data(2,:),10,[1 1 0],'filled'); hold on;            
+end
 
-end    
-   
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%%%%%%%  Step 5: Learn Global DS Parmeters  %%%%%%%%%
+%%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% %%%%%% Step 1b: Estimate local attractors and Construct Activation function %%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Construct GMM for DS mixing functions
-if exist('hs','var');     delete(hs);    end
-if exist('h_data','var'); delete(h_data);end
-if exist('h_att','var');  delete(h_att); end
-if exist('h_vel','var');  delete(h_vel); end
+% Choose Global DS type
+globalDS_type = 0; % 0: agnostic, i.e. 1 linear DS
+                   % 1: shaped, LPV-DS learned with WSAQF Lyapunov Function 
 
-% Compute Hyper-plane functions per local model
-w = zeros(2,est_K); breadth_mod = 50;
-h_functor = cell(1,est_K); grad_h_functor = cell(1,est_K);
-lambda_functor  = cell(1,est_K); Data_k = [];
-for k=1:est_K
-    k
-    % Estimate Local Attractors from Reference Trajectories and GMM
-    Data_k{k}  = Data(:,est_labels==k)
-    att_l(:,k) = Data_k{k}(1:2,end)        
-    
-    % TODO: FIX THIS!
-    [att_l(:,k), ~] =  estimate_local_attractor(Data_k{k});
-    if radius_fun(att_l(:,k)) > 0.5
-        att_l(:,k) = att_g;
-    end  
-    
-    % Create Hyper-Plane functions
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%    Step 6: Learn Activation Function for Locally Active Regions  %%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% === LOCAL HYPER-PLAN FUNCTIONS ===
+%%%%   Create Local Hyper-Plane functions  %%%%
+w = zeros(2, K); breadth_mod = 50;
+h_functor = cell(1, K); grad_h_functor = cell(1, K);
+lambda_functor  = cell(1, K); 
+for k=1:K    
     w(:,k) =  (Mu(:,k)-att_l(:,k))/norm(Mu(:,k)-att_l(:,k));
     h_functor{k} = @(x)hyper_plane(x,w(:,k),att_l(:,k));
     grad_h_functor{k} = @(x)grad_hyper_plane(x,w(:,k),h_functor{k});
@@ -227,42 +281,6 @@ switch act_type
         grad_alpha_fun = @(x)gradient_alpha_fun(x,radius_fun, grad_radius_fun, gpr_fun, grad_gpr_fun, 'gpr');        
 end
 
-% Plot values of mixing function to see where transition occur
-h_dec = plot_mixing_fct_2d(limits, alpha_fun); hold on;
-
-% Plot Reference Trajectories on Top
-plot_attr = 1;
-if plot_attr
-    if exist('h_att_g','var');  delete(h_att_g); end
-    if exist('h_att_l','var');  delete(h_att_l); end
-    [h_data, h_att, h_vel] = plot_reference_trajectories(Data, att_g, att_l, 5);
-    h_att_g = text(att_g(1),att_g(2),'$\mathbf{\xi}^*_g$','Interpreter', 'LaTex','FontSize',20);
-    h_att_l = [];
-    for k=1:est_K
-        att_string = sprintf('$$\\xi^*_%i$$',k);
-        h_att_l = [h_att_l text(att_l(1,k),att_l(2,k),att_string,'Interpreter', 'LaTex','FontSize',20)];
-    end
-    limits_ = limits + [-0.015 0.015 -0.015 0.015];
-    axis(limits_)
-    box on
-end
-xlabel('$\xi_1$','Interpreter', 'LaTex','FontSize',15)
-ylabel('$\xi_2$','Interpreter', 'LaTex','FontSize',15)
-
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% %%%%%%%%  Step 2: ESTIMATE CANDIDATE LYAPUNOV FUNCTION PARAMETERS  %%%%%%%%%
-%%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-[Vxf]    = learn_wsaqf(Data, att_l);
-P_g      = Vxf.P(:,:,1)
-P_l      = Vxf.P(:,:,2:end)
-
-% If any local attractor is equivalent to the global re-parametrize
-equal_g = sum(att_l == zeros(2,1));
-if any(equal_g)
-    id_l = find(equal_g>0);
-    P_g = P_g + P_l(:,:,id_l)
-    P_l(:,:,id_l) = P_g;    
-end
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% %%%%%%%%  Step 3: ESTIMATE SYSTEM DYNAMICS MATRICES  %%%%%%%%%
@@ -458,7 +476,7 @@ end
 %% Plot WSAQF Lyapunov Function and derivative -- NEW
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Type of plot
-contour = 1; % 0: surf, 1: contour
+contour = 0; % 0: surf, 1: contour
 clear lyap_fun_comb lyap_der 
 
 % Lyapunov function
