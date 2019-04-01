@@ -7,3 +7,4 @@ thirdparty/mosek/*
 thirdparty/matbar/*
 thirdparty/baron-lin64/*
 penm_log.txt
+ds_opt/*
