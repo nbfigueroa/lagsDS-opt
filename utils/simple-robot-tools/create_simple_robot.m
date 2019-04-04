@@ -2,7 +2,7 @@
 function theRobot=create_simple_robot(varargin)
 %% creating the links
 
-a1 = 0.8;
+a1 = 0.9;
 a2 = 0.6;
 % a3 = 0.6;
 

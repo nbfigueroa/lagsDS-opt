@@ -31,7 +31,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 close all; clear all; clc
 %%%%%%% Choose to plot robot for simulation %%%%%%%
-with_robot   = 0;
+with_robot   = 1;
 continuous   = 1;
 
 if with_robot
@@ -75,20 +75,32 @@ N = 2;
 clear all; clc; close all;
 pkg_dir = '/home/nbfigueroa/Dropbox/PhD_papers/LAGS-paper/new-code/lagsDS-opt/';
 %%%%%%%%%%%%%%%%%%% Choose a Dataset %%%%%%%%%%%%%%%%%%%%%                     
-choosen_dataset = 2; % 1: Demos from Gazebo Simulations (right trajectories)
+choosen_dataset = 3; % 1: Demos from Gazebo Simulations (right trajectories)
                      % 2: Demos from Gazebo Simulations (left+right trajectories)
                      % 3: Demos from Real iCub 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-sub_sample      = 10; % To sub-sample trajectories   
+sub_sample      = 20; % To sub-sample trajectories   
 [Data, Data_sh, att_g, x0_all, dt, data, ~, ...
     ~, ~, dataset_name, box_size] = load_loco_datasets(pkg_dir, choosen_dataset, sub_sample);
 
-%% %%% Plot Position/Velocity Trajectories %%%%%
+%% Plot Position/Velocity Trajectories %%%%%
 vel_samples = 20; vel_size = 0.5; 
-[h_data, h_att, h_vel] = plot_reference_trajectories_DS(Data, att_g, vel_samples, vel_size);
+[h_data, h_att, h_vel] = plot_reference_trajectories_DS(Data_mean, att_g, vel_samples, vel_size);
 axis equal;
 limits = axis;
 h_att = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
+
+% Position/Velocity Trajectories
+[~,M]      = size(Data);
+Xi_ref     = Data(1:2,:);
+Xi_dot_ref = Data(3:end,:);
+N = 2;
+
+%% Compute the Mean trajectory for the Locally Active Region Estimation
+sub_sample      = 1;
+[Data_mean] = getMeanTrajectory(data, [0;0], sub_sample, dt);
+
+%% For 2D-locomotion Datasets
 switch choosen_dataset
     case 1
         %%%%% Draw Obstacle %%%%%
@@ -103,12 +115,6 @@ end
 title_name = strcat('Reference Trajectories from:', dataset_name);
 title(title_name,'Interpreter','LaTex','FontSize',16);
 
-% Position/Velocity Trajectories
-[~,M]      = size(Data);
-Xi_ref     = Data(1:2,:);
-Xi_dot_ref = Data(3:end,:);
-N = 2;
-
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  Step 2 (Locally Linear State-Space Paritioning): Fit GMM to Trajectory Data  %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -119,31 +125,19 @@ N = 2;
 est_options = [];
 est_options.type             = 0;   % GMM Estimation Alorithm Type   
 
-% If algo 1 selected:
-est_options.maxK             = 10;  % Maximum Gaussians for Type 1
-est_options.fixed_K          = [];  % Fix K and estimate with EM for Type 1
-
 % If algo 0 or 2 selected:
-est_options.samplerIter      = 50;  % Maximum Sampler Iterations
-                                    % For type 0: 20-50 iter is sufficient
-                                    % For type 2: >100 iter are needed
-                                    
+est_options.samplerIter      = 50;  % Maximum Sampler Iterations                                 
 est_options.do_plots         = 1;   % Plot Estimation Statistics
-est_options.sub_sample       = 5;   % Size of sub-sampling of trajectories
+est_options.sub_sample       = 1;   % Size of sub-sampling of trajectories
                                     % 1/2 for 2D datasets, >2/3 for real    
 % Metric Hyper-parameters
 est_options.estimate_l       = 1;   % '0/1' Estimate the lengthscale, if set to 1
 est_options.l_sensitivity    = 5;   % lengthscale sensitivity [1-10->>100]
-                                    % Default value is set to '2' as in the
-                                    % paper, for very messy, close to
-                                    % self-intersecting trajectories, we
-                                    % recommend a higher value
-est_options.length_scale     = [];  % if estimate_l=0 you can define your own
-                                    % l, when setting l=0 only
-                                    % directionality is taken into account
+est_options.length_scale     = [];  
 
-%% Fit GMM to Trajectory Data
-[Priors, Mu, Sigma] = fit_gmm(Xi_ref, Xi_dot_ref, est_options);
+% Fit GMM to Trajectory Data
+% [Priors, Mu, Sigma] = fit_gmm(Xi_ref, Xi_dot_ref, est_options);
+[Priors, Mu, Sigma] = fit_gmm(Data_mean(1:2,:), Data_mean(3:4,:), est_options);
 K = length(Priors);
 
 %% Generate GMM data structure for DS learning
@@ -162,6 +156,20 @@ if adjusts_C  == 1
     ds_gmm.Sigma = Sigma_;
 end   
 
+%% Align Covariance Matrices Re-estimate GMM parameters
+unique_labels = unique(est_labels);
+Mu_k = Mu;  Sigma_k = Sigma;
+for k=1:length(unique_labels)
+    cluster_points = Xi_ref(:,est_labels == unique_labels(k));
+    if ~isempty(cluster_points)
+        [ V_k, L_k, Mu_k(:,k) ] = my_pca( cluster_points );
+        Sigma_k(:,:,k) = V_k*L_k*V_k';
+    end
+end
+rel_dilation_fact = 0.5;
+Sigma_k = adjust_Covariances(Priors, Sigma_k, 1, rel_dilation_fact);
+ds_gmm.Mu = Mu_k; ds_gmm.Sigma = Sigma_k;
+
 %%  Visualize Gaussian Components and labels on clustered trajectories 
 % Extract Cluster Labels
 [~, est_labels] =  my_gmm_cluster(Xi_ref, ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma, 'hard', []);
@@ -179,7 +187,7 @@ grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
 
 %%%%    Extract local linear DS directions and attractors   %%%%
 % If attractors inside local regions decrease gauss_thres
-gauss_thres = 0.1; plot_local_params = 1;
+gauss_thres = 0.25; plot_local_params = 1;
 [att_l, local_basis] = estimate_local_attractors_lags(Data, est_labels, ds_gmm, gauss_thres, radius_fun, att_g);
 if plot_local_params
     [h_att_l, h_dirs] = plotLocalParams(att_l, local_basis, Mu);
@@ -193,16 +201,15 @@ end
 P_g_prior = Vxf.P*K;
 
 % Learn WSAQF 
-scale_prior = 0.9; % ==> Check that it converges.. if it doesn't, reduce scal1!
-att_shifted = att_l-repmat(att_g,[1 K]);
-[Vxf]    = learn_wsaqf_lags(Data_sh, att_shifted, P_g_prior*scale_prior);
+scale_prior = 1; % ==> Check that it converges.. if it doesn't, reduce scale!
+att_origin = att_l-repmat(att_g,[1 K]);
+att_l_mod = att_l;
+
+[Vxf]    = learn_wsaqf_lags(Data_sh, att_origin, P_g_prior*scale_prior);
 P_g      = Vxf.P(:,:,1);
 P_l      = Vxf.P(:,:,2:end);
 
-trace(P_g)
-trace(P_l(:,:,1))
-
-%% % If any local attractor is equivalent to the global re-parametrize %%%
+%%% If any local attractor is equivalent to the global re-parametrize %%%
 att_diff = att_l-repmat(att_g,[1 K]);
 equal_g = find(any(att_diff)==0);
 if equal_g ~= 0
@@ -211,15 +218,14 @@ if equal_g ~= 0
         P_l(:,:,equal_g(ii)) = P_g_;
     end
 end
-
-%%% Plot learned Lyapunov Function %%%
+%% %%% Plot learned Lyapunov Function %%%%%
 if N == 2
     contour = 1; % 0: surf, 1: contour
     clear lyap_fun_comb 
     
     % Lyapunov function
-    lyap_fun_comb = @(x)lyapunov_function_combined(x, att_g, att_l, 1, P_g, P_l, ds_gmm);
-    title_string = {'$V_{DD-WSAQF}(\xi) = (\xi-\xi_g^*)^TP_g(\xi-\xi_g^*) + \sum_{k=1}^K\beta^k((\xi-\xi_g^*)^TP_l^k(\xi-\xi_k^*))^2$'};
+    lyap_fun_comb = @(x)lyapunov_function_combined(x, att_g, att_l_mod, 1, P_g, P_l, ds_gmm);
+    title_string = {'$V(\xi) = (\xi-\xi_g^*)^TP_g(\xi-\xi_g^*) + \sum_{k=1}^K\beta^k((\xi-\xi_g^*)^TP_l^k(\xi-\xi_k^*))^2$'};
     if exist('h_lyap','var');  delete(h_lyap);     end
     if exist('hd_lyap','var');     delete(hd_lyap);     end
     [h_lyap] = plot_lyap_fct(lyap_fun_comb, contour, limits,  title_string, 0);
@@ -230,8 +236,8 @@ end
 %%      Step 5: Learn Global DS Parameters     %%      
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Choose Global DS type %%%
-globalDS_type = 1; % 0: agnostic, i.e. 1 linear DS
-                   % 1: shaped, LPV-DS learned with WSAQF Lyapunov Function 
+globalDS_type = 1; % 0: linear-DS
+                   % 1: nonlinear-DS, LPV-DS learned with WSAQF Lyapunov Function 
 %%% Choose Lyapunov Candidate type %%%                   
 lyapType      = 1; % 0: P-QLF as in CoRL paper
                    % 1: WSAQF as in LAGS paper
@@ -241,7 +247,7 @@ switch globalDS_type
     case 0 % Parametrize an agnostic global DS
     %%%%%%%%  Linear DS f_g(xi) = (Axi + b) %%%%%%%%
     
-    globalDS_name = 'Agnostic Global DS';
+    globalDS_name = 'Linear Global DS';
     case 1 
     %%%%%%%%  LPV-DS f_g(xi) = sum_{k=1}^{K}\gamma_k(xi)(A_kxi + b_k) %%%%%%%%                
         switch lyapType
@@ -255,14 +261,15 @@ switch globalDS_type
                 
             case 1
                 %%%%%%% Learn LPV-DS with WSAQF Constraint %%%%%
-                eps_scale = 100; %==> If "Full constraints don't converge increase/decrease"
-                [A_g, b_g, ~] = optimize_globalDS_lags(Data, att_g, 3, ds_gmm, P_g, P_l, att_l, eps_scale);                                
+                eps_scale = 100; %==> "If Constraints don't converge increase/decrease"
+                enforce_g = 1;  %==> "Enforce A+A' on DS centered at global attractor"
+                [A_g, b_g, ~] = optimize_globalDS_lags(Data, att_g, 3, ds_gmm, P_g, P_l, att_l_mod, eps_scale, enforce_g, equal_g);                                
                 global_ds = @(x) lpv_ds(x, ds_gmm, A_g, b_g); 
                 globalDS_name = 'LPV Global DS (WSAQF)';                                                              
         end        
 end
 
-%% %%%%%%%%%%%%    Plot Resulting DS  %%%%%%%%%%%%%%%%%%%
+%% %%%  Plot Resulting DS  %%%%%
 % Fill in plotting options
 ds_plot_options = [];
 ds_plot_options.sim_traj  = 1;            % To simulate trajectories from x0_all
@@ -271,15 +278,33 @@ ds_plot_options.init_type = 'ellipsoid';  % For 3D DS, to initialize streamlines
                                           % 'ellipsoid' or 'cube'  
 ds_plot_options.nb_points = 30;           % No of streamlines to plot (3D)
 ds_plot_options.plot_vol  = 1;            % Plot volume of initial points (3D)
+% ds_plot_options.limits    = limits + [0 0.5 0 0];
 
 [hd, hs, hr, x_sim] = visualizeEstimatedDS(Xi_ref, global_ds, ds_plot_options);
 limits = axis;
 title(globalDS_name, 'Interpreter','LaTex','FontSize',20)
- 
-%% %%%%%%%%%%%% Plot Lyapunov function %%%%%%%%%%%%%%%%%%%
+
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%      [OPTIONAL]: Evaluate Global DS Accuracy/Stability   %%      
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% %%% Compare Velocities from Demonstration vs DS %%%%%
+% Compute RMSE on training data
+rmse = mean(rmse_error(global_ds, Xi_ref, Xi_dot_ref));
+fprintf('Global-DS has prediction RMSE on training set: %d \n', rmse);
+
+% Compute e_dot on training data
+edot = mean(edot_error(global_ds, Xi_ref, Xi_dot_ref));
+fprintf('Global-DS has e_dot on training set: %d \n', edot);
+
+if exist('h_vel_comp','var'); delete(h_vel_comp); end
+[h_vel_comp] = visualizeEstimatedVelocities(Data, global_ds);
+title('Real vs. Estimated Velocities w/Global-DS', 'Interpreter', 'LaTex', 'FontSize', 15)
+
+%% %%%  Plot Lyapunov function %%%%%
 if N == 2
     clear lyap_der
-    contour = 0; %0 :surface, 1:contour 
+    contour = 1; %0 :surface, 1:contour 
     switch lyapType
         case 0            
             % Lyapunov function
@@ -294,7 +319,8 @@ if N == 2
             title_string_der = {'Lyapunov Function Derivative $\dot{V}(\xi)$'};
         case 1
             % Derivative of Lyapunov function (gradV*f(x))
-            lyap_der = @(x)lyapunov_combined_derivative(x, att_g, att_l, global_ds, 1, P_g, P_l);
+            lyap_der = @(x)lyapunov_combined_derivative(x, att_g, att_l_mod, global_ds, 1, P_g, P_l);                       
+            
             title_string_der = {'Lyapunov Function Derivative $\dot{V}_{DD-WSAQF}(\xi)$'};
     end
     if exist('h_lyap_der','var'); delete(h_lyap_der); end
@@ -313,7 +339,7 @@ title('Feasible Robot Workspace','Interpreter','LaTex')
 % Base Offset
 base = [-1 1]';
 % Axis limits
-limits = [-2.5 0.5 -0.45 2.2];
+limits = [-2.5 0.75 -0.45 2.2];
 axis(limits)
 if exist('hds_rob','var');  delete(hds_rob);  end
 if exist('hdata_rob','var');delete(hdata_rob);end
@@ -322,7 +348,9 @@ if exist('hatt_rob','var');delete(hatt_rob);end
 [hdata_rob] = scatter(Data(1,:),Data(2,:),10,[1 0 0],'filled'); hold on;            
 [hatt_rob] = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
 title(globalDS_name, 'Interpreter','LaTex','FontSize',20)
-
+    xlabel('$\xi_1$','Interpreter','LaTex','FontSize',20);
+    ylabel('$\xi_2$','Interpreter','LaTex','FontSize',20);
+    
 %% Simulate Passive DS Controller function
 dt = 0.01;
 show_DK = 0;
@@ -342,25 +370,97 @@ else
     simulate_passiveDS(fig1, robot, base, global_ds, att_g, dt);
 end
 
-%% Compare Velocities from Demonstration vs DS
-% Simulated velocities of DS converging to target from starting point
-xd_dot = []; xd = [];
-% Simulate velocities from same reference trajectory
-for i=1:length(Data)
-    xd_dot_ = global_ds(Data(1:2,i));    
-    % Record Trajectories
-    xd_dot = [xd_dot xd_dot_];        
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%   Step 6: Create Activation Function (i.e. select locallly active regions)     %%      
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Visualize Global DS with Locally Linear Partitions
+ds_plot_options.sim_traj  = 0;            
+[hd, hs, hr, x_sim, fig_ds] = visualizeEstimatedDS(Data_mean(1:2,:), global_ds, ds_plot_options);
+title('Choose regions to locally active:', 'Interpreter','LaTex','FontSize',20);
+[ h_gmm, h_ctr, h_txt ] = plotLLRegions(ds_gmm.Mu, ds_gmm.Sigma);
+
+% Compute Hyper-plane functions per local model
+w = zeros(2,est_K); breadth_mod = 50;
+h_functor = cell(1,est_K); grad_h_functor = cell(1,K);
+lambda_functor  = cell(1,est_K); Data_k = [];
+for k=1:K
+    % Create Hyper-Plane functions
+%     w(:,k) =  (Mu(:,k)-att_l(:,k))/norm(Mu(:,k)-att_l(:,k));
+    w(:,k) = local_basis(:,1,k);
+    h_functor{k} = @(x)hyper_plane(x,w(:,k),att_l(:,k));
+    grad_h_functor{k} = @(x)grad_hyper_plane(x,w(:,k),h_functor{k});
+    lambda_functor{k} = @(x)(1-my_exp_loc_act(breadth_mod, att_l(:,k), x));
+    grad_lambda_functor{k} = @(x)grad_lambda_fun(x, breadth_mod, att_l(:,k));    
 end
 
-% Plot Demonstrated Velocities vs Generated Velocities
-if exist('h_vel','var');     delete(h_vel);    end
-h_vel = figure('Color',[1 1 1]);
-plot(Data(3,:)', '.-','Color', [0 0 1], 'LineWidth',2); hold on;
-plot(Data(4,:)', '.-','Color', [1 0 0], 'LineWidth',2); hold on;
-plot(xd_dot(1,:)','--','Color',[0 0 1], 'LineWidth', 1); hold on;
-plot(xd_dot(2,:)','--','Color',[1 0 0], 'LineWidth', 1); hold on;
-grid on;
-legend({'$\dot{\xi}^{ref}_{x}$','$\dot{\xi}^{ref}_{y}$','$\dot{\xi}^{d}_{x}$','$\dot{\xi}^{d}_{y}$'}, 'Interpreter', 'LaTex', 'FontSize', 15)
+%% Choose Locally Linear Regions that you wanto to activate
+choose_k = 1;
+% choosen_active = 1:K;
+choosen_active = [4 8 5];
+% choosen_active = [1 2 3 6 9 7];
+Data_ = Data_mean(1:2,:);
+[~, est_labels_] =  my_gmm_cluster(Data_mean(1:2,:), ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma, 'hard', []);
 
+if choose_k
+    Data_ = [];
+    for k_=1:length(choosen_active)
+        Data_ = [Data_ Data_mean(1:2,est_labels_==choosen_active(k_))];
+    end
+end
 
+%% === Construct Activation Function ===
+act_type = 1;
+
+% Radial Basis Function centered at the global attractor
+B_r = 10;
+radius_fun = @(x)(1 - my_exp_loc_act(B_r, att_g, x));
+grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
+
+% Train GMR/GPR model of the data \Xi_mean,\Kappa
+X_train = Data_; y_train = ones(1,length(X_train));
+switch act_type
+    case 0
+        % Option 1: with normalized pdf of gmm
+        % GMM-PDF
+        gmm_fun    = @(x)ml_gmm_pdf(x, ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma);
+        activ_fun  = @(x) 1 - gmm_fun(x);
+        
+        % Direct vs Max. Alpha functions
+        alpha_fun  = @(x)( (1-radius_fun(x))'.*max(0,activ_fun(x))' + radius_fun(x)');
+        
+        % Compute gradient       
+        grad_gmm_fun   = @(x)grad_gmm_pdf(x, ds_gmm);
+        grad_alpha_fun = @(x)gradient_alpha_fun(x,radius_fun, grad_radius_fun, gmm_fun, grad_gmm_fun, 'gmm');
+
+    case 1 % With GPR       
+        epsilon = 0.1; rbf_var = 0.2; % assuming output variance = 1
+        model.X_train   = X_train';   model.y_train   = y_train';
+        gpr_fun    = @(x) my_gpr(x',[],model,epsilon,rbf_var);
+        activ_fun  = @(x) 1 - gpr_fun(x);                    
+        alpha_fun  = @(x)( (1-radius_fun(x))'.*activ_fun(x)' + radius_fun(x)');        
+        
+        % Compute gradient       
+        grad_gpr_fun   = @(x)gradient_gpr(x, model, epsilon, rbf_var);
+        grad_alpha_fun = @(x)gradient_alpha_fun(x,radius_fun, grad_radius_fun, gpr_fun, grad_gpr_fun, 'gpr');        
+end
+
+%% Plot values of mixing function to see where transition occur
+figure('Color',[1 1 1])
+[h_act] = plot_mixing_fct_2d(limits, alpha_fun); hold on;
+[hdata_act] = scatter(Data(1,:),Data(2,:),10,[0 0 0],'filled'); hold on;            
+[hatt_act] = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
+[ h_gmm, h_ctr, h_txt ] = plotLLRegions(ds_gmm.Mu, ds_gmm.Sigma, choosen_active);
+[h_att_l, h_dirs] = plotLocalParams(att_l, local_basis, Mu, choosen_active);
+xlabel('$\xi_1$','Interpreter', 'LaTex','FontSize',15)
+ylabel('$\xi_2$','Interpreter', 'LaTex','FontSize',15)
+
+%% Visualize Activation Function in 3D
+% Visualize a function
+eval_fun       = @(x)alpha_fun(x);
+h_gamma      = plot_lyap_fct(eval_fun, 0, limits,  {'$\alpha(\xi)$ Function'}, 0);
+
+% Visualize its gradient
+% grad_eval_fun  = @(x)grad_alpha_fun(x);
+% h_grad_gamma = plot_gradient_fct(grad_eval_fun, limits,  '$r$ and $\nabla_{\xi}r$ Function');
 

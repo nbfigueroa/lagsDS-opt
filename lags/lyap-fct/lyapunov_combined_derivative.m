@@ -69,6 +69,12 @@ else
         
         % Computing full derivative
         lyap_der(1,i) = (grad_global_comp + grad_local_comp)' * xd(:,i);
+        
+        % Visualize global component only
+%         lyap_der(1,i) = (grad_global_comp )' * xd(:,i);
+        
+        % Visualize local component only
+%         lyap_der(1,i) = (grad_local_comp )' * xd(:,i);
     end
     
 end

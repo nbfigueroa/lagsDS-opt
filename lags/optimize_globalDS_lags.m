@@ -65,22 +65,25 @@ switch ctr_type
         sdp_options = sdpsettings('solver','penlab','verbose', 1,'usex0',1);
         % Solve Problem with Convex constraints first to get A's
         fprintf('Solving Optimization Problem with Convex Constraints for Non-Convex Initialization...\n');
-%         [A0, b0] = optimize_lpv_ds_from_data_v2(Data, attractor, 0, gmm);
         
         % Initialize with estimation of global DS with P_g only
         P_g = varargin{1};
         [A0, b0, ~] = optimize_lpv_ds_from_data(Data, attractor, 2, gmm, P_g, 0);                        
         
-        
+        % Parse input parametrs
         P_l = varargin{2};
         att_l = varargin{3};
         eps_scale = varargin{4};
-        P_l_sum = sum(P_l,3);
+        P_l_sum = sum(P_l,3);        
+        enforce_g = varargin{5};
+        if (enforce_g == 1)
+            equal_g = varargin{6};
+        end
 end
 
 % Posterior Probabilities per local model
 h_k = posterior_probs_gmm(Xi_ref,gmm,'norm');
-
+j = 1;
 for k = 1:K    
     A_vars{k} = sdpvar(N, N, 'full','real');       
     b_vars{k} = sdpvar(N, 1, 'full');
@@ -107,24 +110,44 @@ for k = 1:K
             assign(Q_vars{k},-eye(N));
             
         case 3 %: non-convex with given P_g and P_l's (using WSAQF)
-            Q_g_vars{k} = sdpvar(N, N,'symmetric','real'); 
-            Q_l_vars{k} = sdpvar(N, N,'symmetric','real'); 
-            
-            % Global QLF constraint
-            Constraints = [Constraints, transpose(A_vars{k})*P_g + P_g*A_vars{k} == Q_g_vars{k}];                        
-                          
-           % Local QLF constraint
-            Constraints = [Constraints, transpose(A_vars{k})*P_l_sum + P_l_sum*A_vars{k} == Q_l_vars{k}];
-
                         
-            Constraints = [Constraints, Q_g_vars{k} <= -epsilon*eye(N)];
-            Constraints = [Constraints, Q_l_vars{k} <= -epsilon*eps_scale*eye(N)];
-                
-                
+            %%%%%% Global QLF constraint %%%%%%
+            Q_g_vars{k} = sdpvar(N, N,'symmetric','real');             
+            Constraints = [Constraints, transpose(A_vars{k})*P_g + P_g*A_vars{k} == Q_g_vars{k}];
+            Constraints = [Constraints, Q_g_vars{k} <= -epsilon*eps_scale*eye(N)];
+            
             % Assign Initial Parameters
-            assign(A_vars{k},A0(:,:,k));                                 
+            assign(A_vars{k},A0(:,:,k));
             assign(Q_g_vars{k},-eye(N));
-            assign(Q_l_vars{k},-eye(N));
+                        
+            %%%%%% Local QLF constraint (SUM) %%%%%%
+            Q_L_vars{k} = sdpvar(N, N,'symmetric','real');
+            Constraints = [Constraints, transpose(A_vars{k})*P_l_sum + P_l_sum*A_vars{k} == Q_L_vars{k}];
+%             Constraints = [Constraints, transpose(A_vars{k})*P_l_sum  == Q_L_vars{k}];
+            Constraints = [Constraints, Q_L_vars{k} <= -epsilon*10*eps_scale*eye(N)];           
+            
+            %%%%%% Local Constraints have to be more negative than global %%%%%%           
+            assign(Q_L_vars{k},-eye(N));
+            
+            %%%%%% Constraint on the Gaussian close to the attractor %%%%%%
+            if enforce_g == 1
+                if k == equal_g
+                    Constraints = [Constraints, transpose(A_vars{k}) + A_vars{k} <= -epsilon*eps_scale*eye(N)];
+                    fprintf('If enforcing GGGG! \n');
+                end
+            end
+            
+            %%%%%% Local QLF constraint (Individual) %%%%%%
+%             for kk=1:size(P_l,3)
+%                 Q_l_vars{j} = sdpvar(N, N,'symmetric','real');                
+%                 if beta_weights(k,kk) > 0
+%                 Constraints = [Constraints, transpose(A_vars{k})*P_l(:,:,kk) + P_l(:,:,kk)*A_vars{k} == Q_l_vars{j}];
+%                 Constraints = [Constraints, Q_l_vars{j} <= -epsilon*eps_scale*0.1*eye(N)];
+%                 assign(Q_l_vars{j},-eye(N));
+%                 j = j + 1;
+%                 end
+%             end          
+          
     end
     
     % Define Constraints
@@ -204,13 +227,16 @@ if ctr_type == 3
     full_constr_viol = zeros(1,size(x_test,2));
     gamma_k_x = posterior_probs_gmm(x_test,gmm,'norm');
     for i=1:size(x_test,2)
-        A_g_k = zeros(2,2); P_l_k = zeros(2,2);
+        A_g_k = zeros(2,2); 
         for k=1:K
             % Compute weighted A's
-            A_g_k = A_g_k + gamma_k_x(k,i) * A_g(:,:,k);
-            
+            A_g_k = A_g_k + gamma_k_x(k,i) * A_g(:,:,k);            
+        end
+        
+        P_l_k = zeros(2,2);
+        for j=1:size(P_l,3)
             % Compute weighted P's
-            lyap_local_k =   (x_test(:,i) - attractor)'*P_l(:,:,k)*(x_test(:,i) - att_l(:,k));
+            lyap_local_k =   (x_test(:,i) - attractor)'*P_l(:,:,j)*(x_test(:,i) - att_l(:,j));
             
             % Computing activation term
             if lyap_local_k >= 0
@@ -219,8 +245,10 @@ if ctr_type == 3
                 beta = 0;
             end
             beta_k_2 = 2 * beta * lyap_local_k;
-            P_l_k = P_l_k + beta_k_2*P_l(:,:,k);
+            
+            P_l_k = P_l_k + beta_k_2*P_l(:,:,j);
         end
+        
         % Compute Q_K
         AQ = A_g_k'*(2*P_g  + P_l_k);
         full_constr_viol(1,i) = sum(eig(AQ+AQ') > 0);

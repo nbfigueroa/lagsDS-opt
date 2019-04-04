@@ -509,3 +509,64 @@ h_gamma      = plot_lyap_fct(eval_fun, contour, limits,  {'$act$ Function'}, 1);
 h_grad_gamma = plot_gradient_fct(grad_eval_fun, limits,  '$r$ and $\nabla_{\xi}r$ Function');
 
 
+%% Testing ideas for computing mean trajectories... fixed that from the beginning
+for k=3:3
+    % Extract local trajectories
+    Data_k{k}      = Data(:,est_labels==k);
+                      
+    % Extract linear DS main directions with velocities    
+    pos_data = Data_k{k}(1:2,:);
+    vel_data = Data_k{k}(3:4,:);
+    
+    % Transform position data to locally Linear Basis
+    local_basis_k = local_basis(:,:,k);
+    local_basis_k = Sigma(:,:,k)
+    pos_data_t = pos_data - repmat(Mu(:,k),[1 length(pos_data)]); 
+    for i=1:length(pos_data_t)
+        pos_data_t(:,i)      = local_basis_k*pos_data_t(:,i);
+    end   
+    
+    % Compute the mean trajectory
+    pos_data_t_X    = pos_data_t(1,:);
+    pos_data_t_y    = pos_data_t(2,:);
+
+    % Do regression from N-1 dimensions to 1
+    % Option 1 with Linear Regression
+    [w, y_est]      = my_lr(pos_data_t_X', pos_data_t_y');
+    % Option 2 with GMR K=2
+    % Fit GMM with Chosen parameters; 
+    Xi = [pos_data_t_X ;pos_data_t_y]; close all;
+    [Priors_reg, Mu_reg, Sigma_reg] = ml_gmmEM(Xi, 1);
+    fprintf('done with gmm-em\n');
+    
+    % Compute Regressive signal and variance
+    N = size(X,2); P = size(y,2);
+    in  = 1:N;       % input dimensions
+    out = N+1:(N+P); % output dimensions
+    [y_est, var_est] = ml_gmr(Priors_reg, Mu_reg, Sigma_reg, pos_data_t_X, in, out);
+    
+    pos_data_t_mean = zeros(size(pos_data_t));
+    pos_data_t_mean(1,:) = pos_data_t_X;
+    pos_data_t_mean(2,:) = y_est';
+    
+    % Transform it back to original coordinate system
+    pos_data_mean = zeros(size(pos_data_t));
+    for i=1:length(pos_data_t)
+        pos_data_mean(:,i)      = local_basis_k'*pos_data_t_mean(:,i) ;
+    end
+    pos_data_mean  = pos_data_mean + repmat(Mu(:,k),[1 length(pos_data)]); 
+    Data_mean = [Data_mean [pos_data_mean; vel_data]];
+    
+    figure('Color',[1 1 1]);
+    scatter(pos_data(1,:), pos_data(2,:),'r'); hold on;
+    scatter(pos_data_t(1,:), pos_data_t(2,:),'b'); hold on;
+    scatter(pos_data_t_mean(1,:), pos_data_t_mean(2,:),'k'); hold on;
+    scatter(pos_data_mean(1,:), pos_data_mean(2,:),'k'); hold on;
+    axis equal
+end
+
+figure('Color',[1 1 1]); 
+scatter(Data_mean(1,:), Data_mean(2,:),'k'); hold on;
+scatter(Data(1,:), Data(2,:),'r'); hold on;
+
+

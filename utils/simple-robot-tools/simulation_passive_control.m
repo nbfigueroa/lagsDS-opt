@@ -57,7 +57,7 @@ while(1)
     
     % Compute Damping Matrix
     Q = findDampingBasis(xd_ref);
-    L = [1 0;0 2];
+    L = [1 0;0 1];
 %     L = [2 0;0 8];
     D = Q*L*Q';
     

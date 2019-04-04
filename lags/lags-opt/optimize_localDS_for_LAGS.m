@@ -156,6 +156,10 @@ if ds_type ~= 3
                     Q_lg = A_L'*(2*P_g);
                     Q_l  = A_L'*P_l;                    
                     
+                    % Constraints for negative-definiteness of Q_l
+%                     lambda_l = max(eig(1/2*(Q_lg+Q_lg')));                    
+%                     Constraints = [Constraints lambda_l < -epsilon];
+                    
                     % Compute Local Lyapunov Component
                     lyap_local =   (chi_samples(:,j) - att_g)'*P_l*(chi_samples(:,j) - att_l);
                     
@@ -174,13 +178,19 @@ if ds_type ~= 3
                     Q_L  = (1-alpha(j))*beta_l_2*Q_l;
                     Q_LGL = Q_LG + Q_GL;
                                         
-                    % Compute lyapunov constraint on Chi samples
-%                     Constraints = [Constraints (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) < ...
-%                         -( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
-%                            (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l))];
+                    % Compute lyapunov constraint on Chi samples using full
+                    % equations
                      Constraints = [Constraints ( (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
                          + ( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
                            (chi_samples(:,j) - att_l)'*Q_L* (chi_samples(:,j) - att_l)) ) < -epsilon];   
+                       
+                    % Using the eigenvalues
+%                     lambda_G = max(eig(Q_G));
+%                     lambda_L = max(eig(Q_L));
+%                     Constraints = [Constraints ( lambda_G*(chi_samples(:,j) - att_g)'*(chi_samples(:,j) - att_g) + ...
+%                          + ( (chi_samples(:,j) - att_l)'*Q_LGL*(chi_samples(:,j) - att_g)  + ...
+%                            lambda_L*(chi_samples(:,j) - att_l)'*(chi_samples(:,j) - att_l)) ) < -epsilon];   
+                    
                        
                     %%%%%%%%%%%% FOR DEBUGGING %%%%%%%%%%%%
                     chi_lyap_constr = (chi_samples(:,j) - att_g)'*Q_G*(chi_samples(:,j) - att_g) + ...
