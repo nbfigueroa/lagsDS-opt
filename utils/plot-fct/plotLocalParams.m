@@ -24,10 +24,7 @@ if N == 2
             case 2
                 c = 'g';
         end
-        Mu_ = Mu(:,choosen_active);
-        size(Mu_)
-        size(U)
-        
+        Mu_ = Mu(:,choosen_active);        
         h_dirs = quiver(Mu_(1,:)',Mu_(2,:)', U, V, vel_size, 'Color', c, 'LineWidth',2); hold on;
     end
     h_att_l = []; h_atts_l = [];

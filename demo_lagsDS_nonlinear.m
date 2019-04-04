@@ -373,17 +373,17 @@ end
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%   Step 6: Create Activation Function (i.e. select locallly active regions)     %%      
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 % Visualize Global DS with Locally Linear Partitions
+clc;
 ds_plot_options.sim_traj  = 0;            
 [hd, hs, hr, x_sim, fig_ds] = visualizeEstimatedDS(Data_mean(1:2,:), global_ds, ds_plot_options);
-title('Choose regions to locally active:', 'Interpreter','LaTex','FontSize',20);
+title('Choose regions to locally activate:', 'Interpreter','LaTex','FontSize',20);
 [ h_gmm, h_ctr, h_txt ] = plotLLRegions(ds_gmm.Mu, ds_gmm.Sigma);
 
 % Compute Hyper-plane functions per local model
-w = zeros(2,est_K); breadth_mod = 50;
-h_functor = cell(1,est_K); grad_h_functor = cell(1,K);
-lambda_functor  = cell(1,est_K); Data_k = [];
+w = zeros(2,K); breadth_mod = 50;
+h_functor = cell(1,K); grad_h_functor = cell(1,K);
+lambda_functor  = cell(1,K); Data_k = [];
 for k=1:K
     % Create Hyper-Plane functions
 %     w(:,k) =  (Mu(:,k)-att_l(:,k))/norm(Mu(:,k)-att_l(:,k));
@@ -396,7 +396,7 @@ end
 
 %% Choose Locally Linear Regions that you wanto to activate
 choose_k = 1;
-% choosen_active = 1:K;
+choosen_active = 1:K;
 choosen_active = [4 8 5];
 % choosen_active = [1 2 3 6 9 7];
 Data_ = Data_mean(1:2,:);
@@ -420,8 +420,10 @@ grad_radius_fun = @(x)grad_lambda_fun(x, B_r, att_g);
 % Train GMR/GPR model of the data \Xi_mean,\Kappa
 X_train = Data_; y_train = ones(1,length(X_train));
 switch act_type
-    case 0
+    case 0 % With GMR
         % Option 1: with normalized pdf of gmm
+        
+        
         % GMM-PDF
         gmm_fun    = @(x)ml_gmm_pdf(x, ds_gmm.Priors, ds_gmm.Mu, ds_gmm.Sigma);
         activ_fun  = @(x) 1 - gmm_fun(x);
@@ -432,7 +434,8 @@ switch act_type
         % Compute gradient       
         grad_gmm_fun   = @(x)grad_gmm_pdf(x, ds_gmm);
         grad_alpha_fun = @(x)gradient_alpha_fun(x,radius_fun, grad_radius_fun, gmm_fun, grad_gmm_fun, 'gmm');
-
+        activation_name = 'GMR';
+        
     case 1 % With GPR       
         epsilon = 0.1; rbf_var = 0.2; % assuming output variance = 1
         model.X_train   = X_train';   model.y_train   = y_train';
@@ -443,23 +446,27 @@ switch act_type
         % Compute gradient       
         grad_gpr_fun   = @(x)gradient_gpr(x, model, epsilon, rbf_var);
         grad_alpha_fun = @(x)gradient_alpha_fun(x,radius_fun, grad_radius_fun, gpr_fun, grad_gpr_fun, 'gpr');        
+        activation_name = 'GPR';        
 end
 
 %% Plot values of mixing function to see where transition occur
 figure('Color',[1 1 1])
 [h_act] = plot_mixing_fct_2d(limits, alpha_fun); hold on;
+[hds_rob] = plot_ds_model(h_act, global_ds, [0;0], limits,'medium'); hold on;
 [hdata_act] = scatter(Data(1,:),Data(2,:),10,[0 0 0],'filled'); hold on;            
 [hatt_act] = scatter(att_g(1),att_g(2), 150, [0 0 0],'d','Linewidth',2); hold on;
 [ h_gmm, h_ctr, h_txt ] = plotLLRegions(ds_gmm.Mu, ds_gmm.Sigma, choosen_active);
 [h_att_l, h_dirs] = plotLocalParams(att_l, local_basis, Mu, choosen_active);
 xlabel('$\xi_1$','Interpreter', 'LaTex','FontSize',15)
 ylabel('$\xi_2$','Interpreter', 'LaTex','FontSize',15)
+title_name = strcat(activation_name, '-based Activation function');
+title(title_name, 'Interpreter','LaTex','FontSize',20);
 
 %% Visualize Activation Function in 3D
 % Visualize a function
 eval_fun       = @(x)alpha_fun(x);
 h_gamma      = plot_lyap_fct(eval_fun, 0, limits,  {'$\alpha(\xi)$ Function'}, 0);
-
+[hdata_act] = scatter(Data(1,:),Data(2,:),10,[1 0 0],'filled'); hold on;            
 % Visualize its gradient
 % grad_eval_fun  = @(x)grad_alpha_fun(x);
 % h_grad_gamma = plot_gradient_fct(grad_eval_fun, limits,  '$r$ and $\nabla_{\xi}r$ Function');
