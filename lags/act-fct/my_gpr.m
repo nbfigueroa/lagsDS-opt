@@ -44,7 +44,7 @@ if ~isempty(y)
         meanfunc     = {@meanZero};
         covfunc      = {@covSEiso}; 
         ell          = rbf_var;     % kernel width of RBF covariance function.
-        sf           = 1;           % signal variance (not measurement noise)
+        sf           = 1;        % signal variance (not measurement noise)
         sn           = epsilon;      % measurement noise
         hyp          = [];
         hyp.cov      = log([ell; sf]);

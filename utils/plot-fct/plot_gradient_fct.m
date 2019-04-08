@@ -16,7 +16,7 @@ for i = 1:size(grad_eval, 2)
    U(i,1)   = gradient(1);
    V(i,1)   = gradient(2);
 end
-h = quiver(x(1,:),x(2,:), U', V', 0.75,  'Color', 'g', 'LineWidth',1);
+h = quiver(x(1,:),x(2,:), U', V', 0.75,  'Color', 'k', 'LineWidth',1);
 title(title_string, 'Interpreter','LaTex','FontSize', 18);
 
 end

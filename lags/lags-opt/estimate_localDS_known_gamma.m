@@ -11,7 +11,7 @@ w_perp = [1;-w_norm(1)/(w_norm(2)+realmin)];
 
 % Solve the convex optimization problem with Yalmip
 sdp_options = [];
-sdp_options = sdpsettings('solver','penlab','verbose', 1);
+sdp_options = sdpsettings('solver','penlab','verbose', 0);
 % sdp_options = sdpsettings('solver','fmincon','verbose', 1);
 
 % Define Constraints
@@ -19,8 +19,9 @@ Constraints     = [];
 % This epsilon is super crucial for stability
 epsilon = 0.1;
 
-% Compute Unit Directions of A_l
-% [Q, L_, ~] =  my_pca(Xi_ref)
+Lambda_maxAg = max(0.5*eig(A_g+A_g'))
+Lambda_minAg = min(0.5*eig(A_g+A_g'));
+R_gk = (Q(:,1)'*0.5*(A_g+A_g')*Q(:,1))/(Q(:,1)'*Q(:,1))
 
 % Estimate Dynamics for local behavior
 if ds_type ~= 3
@@ -36,13 +37,14 @@ if ds_type ~= 3
     
     % Auxiliary matrices for stability
     Q_g   = A_g'*P_g + P_g*A_g;
-    Q_g_l = A_g'*P_l
+    Q_g_l = A_g'*P_l;
     
     % Diverging/Converging constraints
     switch ds_type
         case 1   % 1: Symmetrically converging to ref. trajectory
             % First option, explicitly definig the directions of the A
-            Constraints = [Constraints Lambda_l <= -10*epsilon];            
+%             Constraints = [Constraints Lambda_l <= -10*epsilon];            
+            Constraints = [Constraints Lambda_l <= R_gk];            
             Constraints = [Constraints Lambda_l(2,2) < tracking_factor*Lambda_l(1,1)];            
             Constraints = [Constraints b_var   == -Q*Lambda_l*Q'*att_l];
             
@@ -103,10 +105,10 @@ if ds_type ~= 3
     end
     
     % Output Variables
-    Lambda_l = value(Lambda_l)
-    A_l = Q*Lambda_l*Q'
+    Lambda_l = value(Lambda_l);
+    A_l = Q*Lambda_l*Q';
 %     A_l = value(A_var_l);
-    check(Constraints)
+%     check(Constraints);
     fprintf('Total error: %2.2f\n', value(Objective));
 else
     % Estimate the local dynamics as motion pattern mimicking

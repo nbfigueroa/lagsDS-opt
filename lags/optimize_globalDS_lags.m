@@ -123,30 +123,24 @@ for k = 1:K
             %%%%%% Local QLF constraint (SUM) %%%%%%
             Q_L_vars{k} = sdpvar(N, N,'symmetric','real');
             Constraints = [Constraints, transpose(A_vars{k})*P_l_sum + P_l_sum*A_vars{k} == Q_L_vars{k}];
-%             Constraints = [Constraints, transpose(A_vars{k})*P_l_sum  == Q_L_vars{k}];
             Constraints = [Constraints, Q_L_vars{k} <= -epsilon*10*eps_scale*eye(N)];           
             
             %%%%%% Local Constraints have to be more negative than global %%%%%%           
             assign(Q_L_vars{k},-eye(N));
-            
-            %%%%%% Constraint on the Gaussian close to the attractor %%%%%%
-            if enforce_g == 1
-                if k == equal_g
-                    Constraints = [Constraints, transpose(A_vars{k}) + A_vars{k} <= -epsilon*eps_scale*eye(N)];
-                    fprintf('If enforcing GGGG! \n');
-                end
-            end
-            
+                       
             %%%%%% Local QLF constraint (Individual) %%%%%%
-%             for kk=1:size(P_l,3)
-%                 Q_l_vars{j} = sdpvar(N, N,'symmetric','real');                
-%                 if beta_weights(k,kk) > 0
-%                 Constraints = [Constraints, transpose(A_vars{k})*P_l(:,:,kk) + P_l(:,:,kk)*A_vars{k} == Q_l_vars{j}];
-%                 Constraints = [Constraints, Q_l_vars{j} <= -epsilon*eps_scale*0.1*eye(N)];
-%                 assign(Q_l_vars{j},-eye(N));
-%                 j = j + 1;
-%                 end
-%             end          
+            if enforce_g == 1 && equal_g
+                Q_gl_var = sdpvar(N, N,'symmetric','real');  
+                Constraints = [Constraints, transpose(A_vars{k}) + A_vars{k} == Q_gl_var ];
+                Constraints = [Constraints, Q_gl_var <= -epsilon*eye(N)  ];
+                assign(Q_gl_var,-epsilon*10*eps_scale*eye(N));
+            end
+%             if enforce_g == 1
+%                 Q_l_vars{k} = sdpvar(N, N,'symmetric','real');  
+%                 Constraints = [Constraints, transpose(A_vars{k}) + A_vars{k} == Q_l_vars{k} ];
+%                 Constraints = [Constraints, Q_l_vars{k} <= -epsilon*eye(N)  ];
+%                 assign(Q_l_vars{k},-epsilon*10*eps_scale*eye(N));
+%             end
           
     end
     
@@ -208,18 +202,32 @@ check(Constraints)
 fprintf('Total error: %2.2f\nComputation Time: %2.2f\n', value(Objective),sol.solvertime);
 
 
-%%%% FOR DEBUGGING: Check Negative-Definite Constraint %%%%
+%%%% FOR DEBUGGING: Check Negative-Definite Constraints %%%%
 if ctr_type == 3
-    suff_constr_violations = zeros(1,K);
+    epsilon_local = 0.1;
+    suff_constr_violations       = zeros(1,K);
+    suff_constr_violations_local = zeros(1,K);
     for k=1:K
-        Pg_A =  A_g(:,:,k)'*P_g + P_g*A_g(:,:,k);
-        suff_constr_violations(1,k) = sum(eig(Pg_A + Pg_A') > 0); % strict
+        Pg_A    =  A_g(:,:,k)'*P_g + P_g*A_g(:,:,k);
+        suff_constr_violations(1,k)       = sum(0.5*eig(Pg_A + Pg_A') > 0); % strict  
+        if any(0.5*eig(A_g(:,:,k) + A_g(:,:,k)') > epsilon_local)
+            k
+            0.5*eig(A_g(:,:,k) + A_g(:,:,k)')
+        end
+        suff_constr_violations_local(1,k) = sum(0.5*eig(A_g(:,:,k) + A_g(:,:,k)') > epsilon_local); % strict                                        
     end
     % Check Constraint Violation
     if sum(suff_constr_violations) > 0
         warning(sprintf('Global Sufficient System Matrix Constraints are NOT met..'))
     else
         fprintf('All Global Sufficient System Matrix Constraints are met..\n')
+    end
+    
+    % Check Constraint Violation
+    if sum(suff_constr_violations_local) > 0
+        warning(sprintf('Local Sufficient System Matrix Constraints are NOT met..'))
+    else
+        fprintf('All Local Sufficient System Matrix Constraints are met..\n')
     end
     
     % Check full constraints along reference trajectory
@@ -255,9 +263,9 @@ if ctr_type == 3
     end
     % Check Constraint Violation
     if sum(full_constr_viol) > 0
-        warning(sprintf('Full System Matrix Constraints are NOT met..'))
+        warning(sprintf('Global-Local System Matrix Constraints are NOT met..'))
     else
-        fprintf('Full System Matrix Constraints are met..\n')
+        fprintf('Global-Local System Matrix Constraints are met..\n')
     end
     
 end

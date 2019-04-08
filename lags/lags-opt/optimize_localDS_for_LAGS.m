@@ -30,12 +30,12 @@ if stability_vars.add_constr
     constraint_type = stability_vars.constraint_type;
     chi_samples     = stability_vars.chi_samples;
     [~,M_chi]       = size(chi_samples);
-    alpha           = feval(stability_vars.alpha_fun,chi_samples);
-    h               = feval(stability_vars.h_fun,chi_samples);
+    alpha           = feval(stability_vars.alpha_fun,chi_samples)
+    h               = feval(stability_vars.h_fun,chi_samples)
     
     switch constraint_type
         case 'full'
-            grad_lyap   = feval(stability_vars.grad_lyap_fun, chi_samples);
+            grad_lyap   = feval(stability_vars.grad_lyap_fun, chi_samples)
         case 'matrix'
             P_g = stability_vars.P_g;
             P_l = stability_vars.P_l;            
@@ -71,8 +71,8 @@ end
 
 % predefine A_d
 A_d = eye(N); b_d = -A_d*att_l;
-Lambda_Ag = eig(A_g);
-lambda_max_Ag = max(Lambda_Ag);
+Lambda_Ag = eig(A_g)
+lambda_max_Ag = max(Lambda_Ag)
 
 % Define Constraints
 Constraints     = [];

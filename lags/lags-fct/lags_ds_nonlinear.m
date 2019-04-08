@@ -1,4 +1,4 @@
-function [x_dot] = lags_ds_nonlinear(x, alpha_fun, ds_gmm, A_g, b_g, A_l, b_l, A_d, b_d, h_functor, lambda_functor, grad_h_functor, att_g, att_l, modulation)
+function [x_dot] = lags_ds_nonlinear(x, alpha_fun, ds_gmm, A_g, b_g, A_l, b_l, A_d, b_d, h_functor, lambda_functor, grad_h_functor, att_g, att_l, modulation, scale)
 
 % Auxiliary Variables
 [N,M] = size(x);
@@ -99,18 +99,16 @@ for i = 1:size(x,2)
         end
         
         % Weighted local component
-        f_l(:,k) = beta_k_x(k,i) * local_DS_k;
-        
-        if sum(any(A_l(:,:,1)))== 0
-            f_l(:,k) = zeros(2,1);
-        end
+        f_l(:,k) = beta_k_x(k,i) * local_DS_k;        
     end
     f_l  = sum(f_l,2);
     
     %%%%% Sum of Global + Local components %%%%%
+    % More conservative - is FOR SURE Stable - but might be slow
+    x_dot(:,i) = alpha(i)*f_g  + (1/scale)*(1-alpha(i))*f_l;    
+    
+    % Sped up active region
     x_dot(:,i) = alpha(i)*f_g  + (1-alpha(i))*f_l;
-%     x_dot(:,i) = f_g;
-   
     
 end
 end

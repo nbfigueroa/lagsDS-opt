@@ -5,15 +5,36 @@ switch  choosen_dataset
              load(strcat(pkg_dir,'datasets/2d-locomotion/procdata_icubGazebo_right'))
              dataset_name = 'Gazebo Demonstrations-1';
              box_size = [0.45 0.15 0.05];
-             
+             for i=1:3
+                 data{i} = data{i}(:,400:end);
+                 qdata{i} = qdata{i}(:,400:end);
+             end             
+
     case 2             
              load(strcat(pkg_dir,'datasets/2d-locomotion/procdata_icubGazebo_full'))
              dataset_name = 'Gazebo Demonstrations-2';
-             box_size = [0.45 0.15 0.05];             
+             box_size = [0.45 0.15 0.05];  
+             for i=1:3
+                 data{i} = data{i}(:,400:end);
+                 qdata{i} = qdata{i}(:,400:end);
+             end
+             
     case 3        
             load(strcat(pkg_dir,'datasets/2d-locomotion/procdata_icubwMichael'))
             dataset_name = 'Real Demonstrations w/Mike';
             box_size = [0.15 0.1 0.05];
+            
+    case 4        
+            load(strcat(pkg_dir,'datasets/2d-locomotion/procdata_icub_narrow'))
+            dataset_name = 'iCub Narrow Passage Walking';
+            box_size = [0.15 0.1 0.05];            
+            data(3) = [];
+            qdata(3) = [];
+            
+    case 5        
+            load(strcat(pkg_dir,'datasets/2d-locomotion/procdata_object_conveyor'))
+            dataset_name = 'iCubs Object Conveyor Co-Manipulation';
+            box_size = [0.15 0.1 0.05];                        
 end
 
 % Process and sub-sample trajectories... might need to add qdata
