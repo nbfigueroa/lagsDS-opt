@@ -814,8 +814,8 @@ if N == 2
 end
 
 %% Save LAGS-DS parameters to text files
-DS_name = 'iCub-Narrow-Passage-LAGS';
-% DS_name = 'iCub-Object-Conveyor-LAGS';
+% DS_name = 'iCub-Narrow-Passage-LAGS';
+DS_name = 'iCub-Object-Conveyor-LAGS';
 save_lagsDS_to_txt(DS_name, pkg_dir,  ds_gmm, (1/scale)*A_g, att_g, A_l_k, A_d_k, att_l, w, breadth_mod*ones(1,K), scale, B_r)
 
 % Write Model to txt file for C++ Class

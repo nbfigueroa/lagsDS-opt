@@ -8,7 +8,9 @@ Mu_vec     = ds_gmm.Mu(1:end);
 Sigma_vec  = ds_gmm.Sigma(1:end);
 
 % DS parameters
-A_vec      = A_k(1:end);
+Ag_vec      = A_k(1:end);
+Al_vec      = A_l_k(1:end);
+Ad_vec      = A_d_k(1:end);
 
 % Initial points (to simulate)
 x0_all_vec = x0_all(1:end);
@@ -21,13 +23,13 @@ lagsDS_model.M            = dim;
 lagsDS_model.Priors       = Priors_vec;
 lagsDS_model.Mu           = Mu_vec;
 lagsDS_model.Sigma        = Sigma_vec;
-lagsDS_model.A_g          = A_vec;
+lagsDS_model.A_g          = Ag_vec;
 lagsDS_model.att_g        = att(1:end);
-lagsDS_model.A_l          = A_l_k;
-lagsDS_model.A_d          = A_d_k;
-lagsDS_model.att_l        = att_l;
-lagsDS_model.w_l          = w_l;
-lagsDS_model.b_l          = b_l;
+lagsDS_model.A_l          = Al_vec;
+lagsDS_model.A_d          = Ad_vec;
+lagsDS_model.att_l        = att_l(1:end);
+lagsDS_model.w_l          = w_l(1:end);
+lagsDS_model.b_l          = b_l(1:end);
 lagsDS_model.scale        = scale;
 lagsDS_model.b_g          = b_g;
 lagsDS_model.gpr_path     = gpr_filename;
