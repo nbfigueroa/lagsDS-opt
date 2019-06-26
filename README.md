@@ -27,7 +27,7 @@ Note that [phys-gmm](https://github.com/nbfigueroa/phys-gmm) depends on [LightSp
 ---
 
 **References**     
-> [1] Figueroa, N and Billard, A. "Locally Active Globally Stable Dynamical Systems: Theory, Learning and Experiments". In Preparation   
+> [1] Figueroa, N., Faraji, S, and Billard, A. "Locally Active Globally Stable Dynamical Systems: Theory, Learning and Experiments". In Preparation   
 > [2] Figueroa, N. and Billard, A. (2018) "A Physically-Consistent Bayesian Non-Parametric Mixture Model for Dynamical System Learning". In Proceedings of the 2nd Conference on Robot Learning (CoRL).
 
 **Contact**: [Nadia Figueroa](http://lasa.epfl.ch/people/member.php?SCIPER=238387) (nadia.figueroafernandez AT epfl dot ch)
